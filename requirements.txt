@@ -1,0 +1,12 @@
+pandas
+numpy
+pyarrow
+scikit-learn
+streamlit
+google-genai
+requests
+python-dotenv
+joblib
+fastapi
+uvicorn[standard]
+pip-system-certs
