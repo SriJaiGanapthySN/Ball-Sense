@@ -1,11 +1,10 @@
-import { ArrowRight, ArrowUpRight, BarChart3, FlaskConical, Hand, LayoutDashboard, MessageCircle, Radio, Users } from "lucide-react";
+import { ArrowRight, ArrowUpRight, BarChart3, FlaskConical, Hand, LayoutDashboard, MessageCircle, Radio } from "lucide-react";
 import { FeedStatus, MatchCard } from "./LiveTab.jsx";
 import { matchState, orderMatches } from "../lib/liveMatches.js";
 import Wordmark from "./Wordmark.jsx";
 
 const WORKSPACE = [
   { id: "dashboard", icon: LayoutDashboard, label: "Analytics", meta: "The numbers" },
-  { id: "compare", icon: Users, label: "Player Comparison", meta: "Head to head" },
   { id: "predict", icon: BarChart3, label: "Series Predictor", meta: "The next contest" },
   { id: "chat", icon: MessageCircle, label: "Cricket Assistant", meta: "Ask a question" },
 ];

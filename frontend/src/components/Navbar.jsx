@@ -1,4 +1,4 @@
-import { MessageCircle, BarChart3, Radio, Users, LayoutDashboard, Home, ArrowUpRight, Hand, FlaskConical } from "lucide-react";
+import { MessageCircle, BarChart3, Radio, LayoutDashboard, Home, ArrowUpRight, Hand, FlaskConical } from "lucide-react";
 import Wordmark from "./Wordmark.jsx";
 
 export default function Navbar({ tab, setTab }) {
@@ -6,7 +6,6 @@ export default function Navbar({ tab, setTab }) {
     { id: "home", label: "Overview", icon: Home, group: "Match centre" },
     { id: "live", label: "Live Matches", icon: Radio, group: "Match centre" },
     { id: "dashboard", label: "Analytics", icon: LayoutDashboard, group: "Intelligence" },
-    { id: "compare", label: "Player Comparison", icon: Users, group: "Intelligence" },
     { id: "predict", label: "Series Predictor", icon: BarChart3, group: "Intelligence" },
     { id: "chat", label: "Cricket Assistant", icon: MessageCircle, group: "Intelligence" },
     { id: "handcricket", label: "Hand Cricket", icon: Hand, group: "The pavilion" },
