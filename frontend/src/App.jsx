@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
+import { BarChart3, MessageCircle } from "lucide-react";
 import Navbar from "./components/Navbar.jsx";
 import LandingPage from "./components/LandingPage.jsx";
 import LiveTab from "./components/LiveTab.jsx";
@@ -6,10 +7,8 @@ import { getStatus } from "./api.js";
 import useLiveMatches from "./hooks/useLiveMatches.js";
 import { scenarioFromMatch } from "./lib/cricketGames.js";
 
-const ChatTab = lazy(() => import("./components/ChatTab.jsx"));
 const PredictorTab = lazy(() => import("./components/PredictorTab.jsx"));
 const PlayerComparisonTab = lazy(() => import("./components/PlayerComparisonTab.jsx"));
-const DashboardTab = lazy(() => import("./components/DashboardTab.jsx"));
 const HandCricketTab = lazy(() => import("./components/HandCricketTab.jsx"));
 const WhatIfTab = lazy(() => import("./components/WhatIfTab.jsx"));
 
@@ -23,6 +22,17 @@ const PAGES = {
   handcricket: { title: "Hand Cricket", category: "The Pavilion" },
   whatif: { title: "What If Lab", category: "The Pavilion" },
 };
+
+function ComingSoon({ icon: Icon, title, description }) {
+  return (
+    <section className="coming-soon" aria-labelledby="coming-soon-title">
+      <div className="coming-soon-icon"><Icon size={25} strokeWidth={1.6} /></div>
+      <span className="eyebrow">In the nets</span>
+      <h2 id="coming-soon-title">{title} is coming soon</h2>
+      <p>{description}</p>
+    </section>
+  );
+}
 
 export default function App() {
   const [tab, updateTab] = useState("home");
@@ -69,11 +79,11 @@ export default function App() {
             <LandingPage status={status} onNavigate={setTab} live={live} />
           ) : tab !== "handcricket" && tab !== "whatif" ? (
             <div className="content" key={tab}>
-              {tab === "chat" && <ChatTab geminiConfigured={!!status?.gemini_configured} />}
+              {tab === "chat" && <ComingSoon icon={MessageCircle} title="Cricket Assistant" description="The analyst's desk is being prepared for its next innings." />}
               {tab === "predict" && <PredictorTab />}
               {tab === "live" && <LiveTab cricapiConfigured={!!status?.cricapi_configured} live={live} onSimulate={(match) => { setImportedScenario(scenarioFromMatch(match)); setTab("whatif"); }} />}
               {tab === "compare" && <PlayerComparisonTab geminiConfigured={!!status?.gemini_configured} />}
-              {tab === "dashboard" && <DashboardTab />}
+              {tab === "dashboard" && <ComingSoon icon={BarChart3} title="Analytics" description="Historical insights and performance views are being prepared." />}
             </div>
           ) : null}
           <div key="handcricket" className="content" hidden={tab !== "handcricket"}>{openedGames.includes("handcricket") && <HandCricketTab active={tab === "handcricket"} />}</div>

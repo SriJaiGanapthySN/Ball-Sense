@@ -575,6 +575,51 @@ button {
   color: var(--accent-2);
 }
 
+.coming-soon {
+  min-height: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  text-align: center;
+  animation: fade-in 0.25s ease;
+}
+
+.coming-soon-icon {
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  margin-bottom: 18px;
+  border: 1px solid #385440;
+  border-radius: 6px;
+  background: #293b31;
+  color: var(--accent);
+}
+
+.coming-soon .eyebrow {
+  color: var(--accent-2);
+  text-transform: uppercase;
+}
+
+.coming-soon h2 {
+  margin: 9px 0 8px;
+  font-family: var(--font-display);
+  font-size: 36px;
+  font-weight: 600;
+}
+
+.coming-soon p {
+  max-width: 390px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 /* ---------- Chat ---------- */
 .chat-log {
   display: flex;
