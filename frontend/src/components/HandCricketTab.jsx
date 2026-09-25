@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useMachine } from "@xstate/react";
-import { ArrowRight, Camera, Check, Clapperboard, Coins, Crosshair, Hand, Info, Maximize, Minimize, Pause, Play, RotateCcw, Target, Trophy, Volume2, VolumeX, Zap } from "lucide-react";
+import { ArrowRight, Camera, Check, Clapperboard, Coins, Crosshair, Hand, Info, Maximize, Minimize, Pause, Play, RotateCcw, Target, Trophy, Users, Volume2, VolumeX, Zap } from "lucide-react";
 import { formatOvers, handCricketMachine, handMatchInsights } from "../lib/cricketGames.js";
 import CricketArena from "./CricketArena.jsx";
 import HandScorecard from "./HandScorecard.jsx";
+import HandMultiplayer from "./HandMultiplayer.jsx";
+import { inviteCode, readRoomSession } from "../lib/handMultiplayer.js";
 import { deliveryLabel } from "../lib/cricketPresentation.js";
 import { DELIVERY_MS, opponentPlan, sampleOpponent, sampleLength, training } from "../lib/cricketOpponent.js";
 import { DISMISSAL_LABELS, TOSS_MS, HANDSHAKE_MS, matchSummary, samplePresentation } from "../lib/cricketPresentation.js";
@@ -32,6 +34,23 @@ function HandSign({ value, className = "" }) {
 }
 
 export default function HandCricketTab({ active = true }) {
+  const [mode, setMode] = useState(() => {
+    if (inviteCode(window.location.search)) return "friends";
+    try { return readRoomSession(window.sessionStorage) ? "friends" : "solo"; } catch { return "solo"; }
+  });
+  const [opened, setOpened] = useState([mode]);
+  function selectMode(next) {
+    setMode(next);
+    setOpened((previous) => previous.includes(next) ? previous : [...previous, next]);
+  }
+  return <>
+    <div className="hand-modebar"><div className="segmented-control" role="group" aria-label="Hand cricket mode"><button className={mode === "solo" ? "selected" : ""} aria-pressed={mode === "solo"} onClick={() => selectMode("solo")}><Zap size={16} />Solo</button><button className={mode === "friends" ? "selected" : ""} aria-pressed={mode === "friends"} onClick={() => selectMode("friends")}><Users size={16} />Play with a friend</button></div></div>
+    <div hidden={mode !== "solo"}>{opened.includes("solo") && <SoloHandCricket active={active && mode === "solo"} />}</div>
+    <div hidden={mode !== "friends"}>{opened.includes("friends") && <HandMultiplayer active={active && mode === "friends"} HandSign={HandSign} />}</div>
+  </>;
+}
+
+function SoloHandCricket({ active = true }) {
   const [snapshot, send] = useMachine(handCricketMachine);
   const [overs, setOvers] = useState(2);
   const [wicketLimit, setWicketLimit] = useState(3);
@@ -242,11 +261,11 @@ export default function HandCricketTab({ active = true }) {
       <div className="hand-layout">
         <div className="hand-main">
           <div className="hand-scoreboard">
-            {["you", "computer"].map((side) => <div key={side} className={`hand-score ${side} ${context.batting === side && isPlaying ? "batting" : ""}`}><span>{side === "you" ? "YOU" : "COMPUTER"}{context.batting === side && isPlaying && <span className="batting-label">BATTING</span>}</span><strong aria-label={`${side} score`}>{context.scores[side].runs}<small>/{context.scores[side].wickets}</small></strong><em>{formatOvers(context.scores[side].balls)} overs</em></div>)}
+            {["you", "computer"].map((side) => <div key={side} className={`hand-score ${side} ${context.batting === side && isPlaying ? "batting" : ""}`}><span className="team-role">{side === "you" ? "HOME XI" : "AWAY XI"}</span><span>{side === "you" ? "YOU" : "COMPUTER"}{context.batting === side && isPlaying && <span className="batting-label">BATTING</span>}</span><strong aria-label={`${side} score`}>{context.scores[side].runs}<small>/{context.scores[side].wickets}</small></strong><em>{formatOvers(context.scores[side].balls)} overs</em></div>)}
             <div className="innings-marker"><span>INNINGS</span><strong>0{context.innings}</strong>{context.target != null && <span>TARGET {context.target}</span>}</div>
           </div>
           <div className={`hand-arena ${revealing ? "revealing" : ""}`}>
-            <CricketArena active={active} phase={phase} lastBall={lastBall} revealing={revealing} cameraView={cameraView} motion={animate} batting={context.batting} bowlingLength={bowlingLength} tossStage={toss?.stage || (["toss", "ready"].includes(phase) ? "complete" : "none")} tossCoin={toss?.coin || context.coin} ceremony={ceremony} winner={context.result?.winner} awardTeams={summary.award.map((entry) => entry.side).join(",")} onPresentationComplete={completePresentation} onCeremonyComplete={completeCeremony} />
+            <CricketArena active={active} phase={phase} lastBall={lastBall} revealing={revealing} cameraView={cameraView} motion={animate} batting={context.batting} bowlingLength={bowlingLength} tossStage={toss?.stage || (["toss", "ready"].includes(phase) ? "complete" : "none")} tossCoin={toss?.coin || context.coin} ceremony={ceremony} winner={context.result?.winner} scoreboard={context} awardTeams={summary.award.map((entry) => entry.side).join(",")} onPresentationComplete={completePresentation} onCeremonyComplete={completeCeremony} />
             <div className="arena-heading"><span className="eyebrow">{ceremony === "award" ? "POST-MATCH PRESENTATION" : toss ? "THE TOSS / CAPTAINS AT THE CENTRE" : phase === "finished" ? "MATCH COMPLETE" : phase === "setup" ? "THE NIGHTFALL ARENA" : `${context.overs} OVER MATCH / ${insights.pressure.toUpperCase()}`}</span><h2>{ceremony === "award" ? `${summary.award.map((entry) => entry.side === "you" ? "You" : "Computer").join(" & ")} / ${summary.award.length > 1 ? "Joint Men" : "Man"} of the Match` : ceremony === "handshakes" ? "Well played." : toss?.stage === "handshake" ? "Captains shake hands" : tossHeadline || headline}</h2></div>
             <div className="hand-duel">
               <div className="hand-player you"><HandSign value={revealing ? selected : lastBall?.you} /><span>YOUR HAND<strong>{revealing ? selected : lastBall?.you || "--"}</strong></span></div>

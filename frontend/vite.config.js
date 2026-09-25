@@ -7,7 +7,7 @@ export default defineConfig({
     port: 5173,
     watch: { usePolling: true, interval: 750 },
     proxy: {
-      "/api": "http://localhost:8000",
+      "/api": { target: process.env.VITE_API_PROXY_TARGET || "http://localhost:8000", ws: true },
     },
   },
 });

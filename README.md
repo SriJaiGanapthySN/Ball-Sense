@@ -27,6 +27,8 @@ Ballsense goes beyond static stat tables by combining data science, generative A
 
 ### 3. Nightfall 3D Stadium & Adaptive Hand Cricket Engine
 * **Interactive 3D Arena**: A procedural floodlit stadium built with Three.js featuring instanced crowd animation, dynamic floodlight shadows, realistic player rigs, overarm bowling actions, and directional shot gaps.
+* **Detailed Player Avatars**: Anatomical proportions, sculpted faces, varied skin tones, fingers, helmet grilles, shaped pads and shoes, numbered fabric jerseys, and continuous skinned limbs. These are procedural game characters, not photorealistic scans or player likenesses.
+* **Private Online Duels**: Two-player rooms with invite codes and links, server-controlled toss and scoring, hidden locked picks, reconnect support, turn deadlines, and mutually accepted rematches. Solo mode and its saved record remain separate.
 * **Physics & Presentation Realism**: Features reactive fielders with 4.5 unit/sec chase speeds, two-handed keeper gathers, dislodged bails, precommitted $30\%$ overthrow variations, safe direct hits, boundary cheer squads, fireworks, and Man of the Match trophy presentations.
 * **Adaptive AI Opponent**: Trained on **286,000+ T20 deliveries** to learn opponent hand patterns, adapt to required run rates, and optimize boundary prevention.
 
@@ -190,6 +192,35 @@ npm run dev
 ```
 
 Open **http://localhost:5173** in your browser. The Vite dev server automatically proxies `/api/*` requests to FastAPI on port 8000.
+
+### Play Hand Cricket With a Friend
+
+1. Open **Hand Cricket > Play with a friend**. Enter a name, choose overs and wickets, and create a private room. The creator is the **Home captain**, wearing blue.
+2. Share the six-character room code or the invite link. Your friend joins as the **Away captain**, wearing yellow. Both screens show the captains, their roles, and their connection/readiness status.
+3. Both players select **Ready for toss**. Only the **Away captain** calls **Heads** or **Tails**. Both watch the same server-timed coin flip, landing, and result. Each selects **Continue**, the captains shake hands, and only then can the toss winner choose **Bat first** or **Bowl first**. Both players confirm they are ready to play.
+4. Each player locks a number from 1 to 6. The server reveals neither pending number until both have submitted. Matching numbers take a wicket; otherwise the batter's number scores. The existing five rule is preserved: four batting runs plus one counted no-ball extra, without a free hit.
+5. Both players confirm the innings change. After the result, either can request a rematch; both must accept before the game resets.
+
+For phones or laptops on the same trusted network, start the frontend with:
+
+```powershell
+npm --prefix frontend run dev -- --host 0.0.0.0
+```
+
+Open the **Network** URL printed by Vite on both devices, rather than `localhost`. Invite links use the address currently open in the browser, so create the room from that network address when sharing with another device. Windows Firewall or a corporate network may block device-to-device connections; only allow access on networks where it is permitted. The backend can remain bound to `127.0.0.1` because Vite proxies HTTP and WebSocket traffic. To use another backend port, set `VITE_API_PROXY_TARGET` to its HTTP URL before starting Vite.
+
+Room sessions use private, randomly generated seat tokens stored in `sessionStorage`; they are not included in invite links or shared match snapshots. Refreshing the same tab reconnects to the same seat without rerolling the toss or restarting its animation. Opening a seat in another tab replaces the previous connection. A disconnected player has 60 seconds to reconnect, and picks already accepted by the server stay locked. Normal turns and ready/choice phases have a 45-second deadline. Missing an assigned toss call or batting choice forfeits the match. For shared ready and number-pick phases, if one player acts and the other times out, the active player wins; if neither acts, the match is abandoned. Reveal phases advance after both animations finish, with a 45-second fallback. Explicitly leaving an unfinished match forfeits it. Solo records are not modified by multiplayer games.
+
+Solo and multiplayer share the upgraded stadium: covered spectator stands, textured turf, boundary advertising, and in-ground screens displaying the actual team names and scores. A separate broadcast score strip keeps totals clear of the pitch. Broadcast, pitch, and director cameras, reduced motion, sound, and fullscreen remain available.
+
+**Hosting limits:** This version uses in-memory rooms in **one Uvicorn worker**, with up to 200 rooms and 15-minute inactive-room expiry. Server restarts remove rooms; there are no accounts, public matchmaking, permanent leaderboards, or database-backed match history. No cricket-data API or AI key is needed for multiplayer itself. For internet play, deploy the frontend and backend behind HTTPS with WebSocket upgrades (`wss://`), allow the exact frontend origins in `CORS_ORIGINS`, and apply edge rate/connection limits. Do not expose the Vite development server as a public production service. Multiple workers or persistent rooms require a shared store and coordination, such as Redis.
+
+Focused multiplayer verification:
+
+```powershell
+python -m unittest discover -s tests -p test_hand_multiplayer.py -v
+node --test frontend/src/lib/handMultiplayer.test.js frontend/src/lib/cricketAvatar.test.js
+```
 
 ---
 

@@ -6,6 +6,7 @@ import LiveTab from "./components/LiveTab.jsx";
 import { getStatus } from "./api.js";
 import useLiveMatches from "./hooks/useLiveMatches.js";
 import { scenarioFromMatch } from "./lib/cricketGames.js";
+import { inviteCode } from "./lib/handMultiplayer.js";
 
 const PredictorTab = lazy(() => import("./components/PredictorTab.jsx"));
 const PlayerComparisonTab = lazy(() => import("./components/PlayerComparisonTab.jsx"));
@@ -35,8 +36,8 @@ function ComingSoon({ icon: Icon, title, description }) {
 }
 
 export default function App() {
-  const [tab, updateTab] = useState("home");
-  const [openedGames, setOpenedGames] = useState([]);
+  const [tab, updateTab] = useState(() => inviteCode(window.location.search) ? "handcricket" : "home");
+  const [openedGames, setOpenedGames] = useState(() => inviteCode(window.location.search) ? ["handcricket"] : []);
   const [status, setStatus] = useState(null);
   const [importedScenario, setImportedScenario] = useState(null);
   const live = useLiveMatches(!!status?.cricapi_configured, tab === "home" || tab === "live");

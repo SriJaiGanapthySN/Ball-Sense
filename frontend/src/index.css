@@ -1877,6 +1877,98 @@ label {
 .content .team-select-option:focus-visible { background: var(--panel-2); }
 @media (max-width: 980px) { .analytics-grid { grid-template-columns: minmax(0, 1fr); } }
 .game-label.amber { color: var(--accent-2); }
+.hand-modebar { display: flex; margin-bottom: 22px; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
+.hand-modebar .segmented-control { max-width: 360px; }
+.hand-modebar .segmented-control button { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; }
+.room-lobby { display: grid; grid-template-columns: minmax(210px, .7fr) minmax(0, 2fr); gap: 32px; padding: 24px 0 30px; border-top: 1px solid var(--border); }
+.room-lobby-heading h2 { font-size: 28px; margin: 8px 0 18px; }
+.room-lobby-heading .segmented-control { max-width: 260px; }
+.room-fields { min-width: 0; padding: 0; margin: 0; border: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: end; }
+.room-field { display: grid; gap: 8px; min-width: 0; font-size: 12px; color: var(--muted); }
+.room-field input { width: 100%; min-width: 0; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 11px 12px; color: var(--text); font: inherit; min-height: 42px; }
+.room-field .segmented-control button { min-height: 42px; }
+.room-enter { grid-column: 1 / -1; justify-self: start; min-height: 42px; }
+.room-connection { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; background: #18221f; border-top: 1px solid #385046; font-size: 10px; color: var(--muted); min-height: 64px; }
+.room-connection > span, .room-invite { display: flex; align-items: center; gap: 9px; }
+.room-connection .room-online { color: var(--accent); }
+.room-invite strong { font-family: var(--font-display); font-size: 23px; color: var(--text); margin-left: 6px; }
+.room-invite .square-button { width: 34px; height: 34px; }
+.room-notice { display: flex; align-items: center; justify-content: space-between; gap: 12px; overflow-wrap: anywhere; }
+.online-hand .room-player-name { min-width: 0; overflow-wrap: anywhere; }
+.online-hand .hand-score > span { min-height: 18px; align-items: start; }
+.online-hand .hand-score > span small { font-size: 8px; border-bottom: 1px solid currentColor; }
+.online-hand .arena-heading h2 { font-size: 28px; overflow-wrap: anywhere; }
+.online-hand .hand-duel { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.online-hand .hand-player { position: relative; min-width: 0; }
+.online-hand .hand-player > span { min-width: 0; overflow-wrap: anywhere; }
+.online-hand .hand-player > .room-vs { position: absolute; right: -22px; color: var(--muted); font-size: 10px; }
+.online-hand .hand-pick-label > span { min-width: 0; overflow-wrap: anywhere; }
+.room-wait { text-align: center; color: var(--muted); font-size: 13px; }
+.room-match-details { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; padding: 24px 0; border-bottom: 1px solid var(--border); }
+.room-match-details > div { display: grid; gap: 8px; min-width: 0; }
+.room-match-details h3 { margin: 0; font-size: 19px; overflow-wrap: anywhere; }
+.room-match-details span { color: var(--muted); font-size: 11px; }
+.room-match-details strong { font-family: var(--font-display); font-size: 24px; }
+.online-hand .scorecard-team > span, .online-hand .scorecard-table-wrap th, .online-hand .scorecard-bowling > span, .online-hand .scorecard-award h3 { overflow-wrap: anywhere; min-width: 0; }
+.room-leave-dialog { max-width: min(420px, calc(100vw - 32px)); border: 1px solid var(--border); border-radius: 6px; padding: 24px; background: var(--panel); color: var(--text); }
+.room-leave-dialog::backdrop { background: rgba(0, 0, 0, .7); }
+.room-leave-dialog h2 { font-size: 24px; margin: 0 0 12px; }
+.room-leave-dialog p { color: var(--muted); margin-bottom: 24px; }
+@media (max-width: 800px) {
+  .room-lobby { grid-template-columns: minmax(0, 1fr); gap: 22px; }
+  .room-lobby-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 18px; align-items: center; }
+  .room-lobby-heading .eyebrow { grid-column: 1 / -1; }
+  .room-lobby-heading h2 { margin: 0; font-size: 24px; }
+  .room-match-details { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 540px) {
+  .room-lobby-heading { grid-template-columns: minmax(0, 1fr); }
+  .room-lobby-heading .segmented-control { margin-top: 10px; }
+  .room-connection { flex-wrap: wrap; padding: 12px; }
+  .room-fields { gap: 14px; }
+  .room-enter { width: 100%; justify-content: center; }
+  .online-hand .arena-heading h2 { font-size: 22px; }
+  .online-hand .hand-scoreboard { gap: 55px; }
+  .online-hand .hand-score > span { font-size: 9px; gap: 5px; }
+}
+.room-captains { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid #35443d; background: #141b18; }
+.room-captain { --captain-color: #93c3ff; display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 17px 20px; min-width: 0; border-bottom: 2px solid var(--captain-color); }
+.room-captain.computer { --captain-color: #efcf5b; border-left: 1px solid #35443d; }
+.captain-kit { display: grid; place-items: center; width: 42px; height: 46px; color: var(--captain-color); background: #24302d; border-radius: 4px; }
+.captain-identity { min-width: 0; }
+.captain-identity > span { color: var(--captain-color); font-size: 9px; }
+.captain-identity strong { display: block; font-size: 15px; font-weight: 600; margin-top: 5px; overflow-wrap: anywhere; }
+.captain-identity small { font-size: 8px; color: var(--muted); margin-left: 7px; }
+.captain-presence { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--muted); }
+.captain-presence i { width: 6px; height: 6px; border-radius: 50%; background: #87938b; }
+.captain-presence.connected i { background: #88c89a; }
+.toss-desk { max-width: 680px; margin: 0 auto; }
+.toss-desk-header { display: flex; align-items: center; gap: 12px; color: #edcf83; }
+.toss-desk-header > div { flex: 1; min-width: 0; }
+.toss-desk-header strong { display: block; color: var(--text); margin-top: 4px; font-size: 16px; overflow-wrap: anywhere; }
+.toss-desk-header span { font-size: 10px; }
+.toss-countdown { display: flex; align-items: center; gap: 6px; min-width: 48px; font-variant-numeric: tabular-nums; }
+.toss-stages { list-style: none; padding: 0; margin: 20px 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.toss-stages li { display: flex; align-items: center; gap: 7px; font-size: 10px; color: #82978d; border-top: 2px solid #34423c; padding-top: 10px; }
+.toss-stages li > span { display: grid; place-items: center; flex: 0 0 20px; height: 20px; border: 1px solid currentColor; border-radius: 50%; font-size: 9px; }
+.toss-stages li.reached { border-color: #d4b874; color: #e4cf9d; }
+.toss-desk .room-wait { display: flex; align-items: center; justify-content: center; gap: 9px; min-height: 42px; overflow-wrap: anywhere; }
+.arena-experience .hand-score > .team-role { min-height: 0; margin-bottom: 5px; color: #93c3ff; font-size: 8px; }
+.arena-experience .hand-score.computer > .team-role { color: #efcf5b; }
+@media (max-width: 760px) {
+  .room-captain { grid-template-columns: 32px minmax(0, 1fr); padding: 13px 12px; gap: 8px; }
+  .captain-kit { width: 32px; height: 38px; }
+  .captain-identity strong { font-size: 13px; }
+  .captain-identity > span { font-size: 8px; }
+  .captain-presence { grid-column: 2; font-size: 9px; }
+}
+@media (max-width: 400px) {
+  .room-captain { grid-template-columns: minmax(0, 1fr); padding: 12px 10px; }
+  .captain-kit { display: none; }
+  .captain-presence { grid-column: 1; }
+  .toss-stages { gap: 6px; }
+  .toss-stages li { font-size: 9px; gap: 4px; flex-wrap: wrap; }
+}
 .arena-experience { --arena-mint: #93c3ff; --arena-amber: #efcf5b; --arena-red: #f38b77; }
 .arena-experience[data-ceremony="victory"] .hand-duel, .arena-experience[data-ceremony="handshakes"] .hand-duel, .arena-experience[data-ceremony="award"] .hand-duel { visibility: hidden; }
 .broadcast-scorecard { border-top: 3px solid #328d72; background: #101a20; color: #ecf3f4; font-variant-numeric: tabular-nums; }
@@ -1949,19 +2041,22 @@ label {
 .arena-toolbar button[aria-pressed="true"] { color: var(--arena-mint); background: #244338; border-color: #507a6a; }
 .arena-experience .hand-layout { display: block; }
 .arena-experience .hand-main { position: relative; }
-.arena-experience .hand-scoreboard { position: absolute; top: 18px; left: 24px; right: 24px; z-index: 2; background: none; padding: 0; border: 0; pointer-events: none; }
-.arena-experience .hand-score > strong { color: #effff8; font-size: 56px; text-shadow: 0 2px 12px #050a0f; }
+.arena-experience .hand-scoreboard { position: relative; z-index: 2; background: linear-gradient(110deg, #182522, #131b18); padding: 16px 24px; border: 0; border-bottom: 1px solid #344b3e; border-radius: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 80px; font-variant-numeric: tabular-nums; }
+.arena-experience .hand-score { min-width: 0; border-left: 3px solid #2476d3; padding-left: 13px; }
+.arena-experience .hand-score.computer { border-left: 0; border-right: 3px solid #efc52b; padding-left: 0; padding-right: 13px; }
+.arena-experience .hand-score > strong { color: #effff8; font-size: 42px; }
+.arena-experience .hand-score > strong small { font-size: 26px; }
 .arena-experience .hand-score.you > strong { color: var(--arena-mint); }
 .arena-experience .hand-score.computer > strong { color: var(--arena-amber); }
 .arena-experience .hand-score > span, .arena-experience .hand-score > em { color: #d4e1e3; }
-.arena-experience .innings-marker { top: 8px; }
+.arena-experience .innings-marker { top: 27px; }
 .arena-experience .innings-marker strong { color: var(--arena-mint); }
 .arena-experience .innings-marker span { color: #bdcfd0; }
-.arena-experience .hand-arena { height: 550px; min-height: 550px; padding: 0; background: #080f15; text-align: left; border: 0; border-radius: 0; }
-.arena-experience .hand-arena::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, rgba(4,12,17,.78), transparent 28%, transparent 62%, rgba(4,12,17,.93)); }
+.arena-experience .hand-arena { height: 480px; min-height: 480px; padding: 0; background: #080f15; text-align: left; border: 0; border-radius: 0; }
+.arena-experience .hand-arena::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, rgba(8,17,12,.25), transparent 24%, transparent 65%, rgba(8,17,12,.85)); }
 .arena-experience .arena-heading { position: absolute; left: 24px; bottom: 66px; max-width: 55%; z-index: 2; pointer-events: none; }
 .arena-experience .arena-heading .eyebrow { color: var(--arena-mint); font-size: 10px; }
-.arena-experience .arena-heading h2 { font-size: 34px; font-weight: 700; line-height: 1.1; color: #effff8; margin-top: 9px; text-wrap: balance; }
+.arena-experience .arena-heading h2 { font-size: 30px; font-weight: 700; line-height: 1.1; color: #effff8; margin-top: 9px; text-wrap: balance; }
 .arena-experience .hand-duel { position: absolute; right: 24px; bottom: 61px; width: 240px; max-width: 40%; grid-template-columns: 1fr 25px 1fr; margin: 0; z-index: 2; }
 .arena-experience .hand-player { display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--arena-mint); }
 .arena-experience .hand-player.computer { color: var(--arena-amber); }
@@ -2007,16 +2102,18 @@ label {
 .arena-experience[data-motion="off"] .hand-sign { animation: none; }
 @media (max-width: 980px) {
   .arena-experience .game-aside { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .arena-experience .hand-arena { height: 510px; min-height: 510px; }
+  .arena-experience .hand-arena { height: 450px; min-height: 450px; }
 }
 @media (max-width: 520px) {
   .arena-experience .arena-toolbar { gap: 9px; }
   .arena-toolbar .game-label { font-size: 10px; }
-  .arena-experience .hand-arena { height: 490px; min-height: 490px; }
-  .arena-experience .hand-scoreboard { left: 16px; right: 16px; top: 17px; }
-  .arena-experience .hand-score > strong { font-size: 42px; }
+  .arena-experience .hand-arena { height: 430px; min-height: 430px; }
+  .arena-experience .hand-scoreboard { padding: 14px 12px; gap: 60px; }
+  .arena-experience .hand-score { padding-left: 8px; }
+  .arena-experience .hand-score.computer { padding-right: 8px; }
+  .arena-experience .hand-score > strong { font-size: 36px; }
   .arena-experience .hand-score > strong small { font-size: 24px; }
-  .arena-experience .arena-heading { top: 118px; left: 12px; right: 12px; bottom: auto; text-align: center; max-width: none; }
+  .arena-experience .arena-heading { top: 40px; left: 12px; right: 12px; bottom: auto; text-align: center; max-width: none; }
   .arena-experience .arena-heading h2 { font-size: 25px; }
   .arena-experience .arena-heading .eyebrow { font-size: 8px; }
   .arena-experience .hand-duel { bottom: 62px; left: 50%; right: auto; transform: translateX(-50%); width: 230px; max-width: calc(100% - 24px); }
@@ -2053,8 +2150,8 @@ label {
 .hand-arena { position: relative; background: #20372a; min-height: 322px; overflow: hidden; padding: 25px 26px 20px; text-align: center; }
 .cricket-scene { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
 .cricket-scene canvas { display: block; width: 100%; height: 100%; }
-.cricket-scene::after { content: attr(data-shot); position: absolute; top: 112px; left: 24px; padding-left: 9px; border-left: 3px solid #ee9273; color: #e2eeeb; font-size: 9px; text-shadow: 0 1px 3px #000; pointer-events: none; }
-@media (max-width: 520px) { .cricket-scene::after { top: 188px; left: 12px; font-size: 8px; } }
+.cricket-scene::after { content: attr(data-shot); position: absolute; top: 18px; left: 24px; padding-left: 9px; border-left: 3px solid #ee9273; color: #e2eeeb; font-size: 9px; text-shadow: 0 1px 3px #000; pointer-events: none; }
+@media (max-width: 520px) { .cricket-scene::after { top: 15px; left: 12px; font-size: 8px; } }
 .arena-fallback { position: absolute; inset: 0; display: grid; align-content: center; justify-items: center; gap: 20px; background: repeating-linear-gradient(90deg, #123a30 0 40px, #18483a 40px 80px); color: #e2f3ea; font-size: 12px; padding: 20px; }
 .fallback-crease { width: 80px; height: 160px; border-block: 3px solid #eff4df; background: #7c8b68; }
 .ground-art { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }

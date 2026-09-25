@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from backend.routes import dashboard as dashboard_routes
+from backend.routes import hand_multiplayer as hand_multiplayer_routes
 from backend.routes import player_comparison as player_comparison_routes
 from src import chat_assistant, cricapi_client, db
 from src.series_predictor import load_or_train
@@ -34,6 +35,7 @@ app.add_middleware(
 )
 app.include_router(player_comparison_routes.router)
 app.include_router(dashboard_routes.router)
+app.include_router(hand_multiplayer_routes.router)
 
 Format = Literal["ODI", "Test", "T20I"]
 

@@ -5,7 +5,7 @@ import { matchState } from "./liveMatches.js";
 import { DISMISSALS, CATCH_POSITIONS } from "./cricketPresentation.js";
 
 const emptyScore = () => ({ runs: 0, wickets: 0, balls: 0 });
-const initialHandContext = () => ({
+export const initialHandContext = () => ({
   overs: 2, wicketLimit: 3, innings: 1, batting: "you", battingFirst: "you",
   scores: { you: emptyScore(), computer: emptyScore() },
   target: null, history: [], lastBall: null, result: null, tossWinner: null, coin: null,
@@ -89,16 +89,16 @@ export function formatOvers(balls) {
   return `${Math.floor(balls / 6)}.${balls % 6}`;
 }
 
-export function handMatchInsights(context) {
+export function handMatchInsights(context, playerSide = "you") {
   const score = context.scores[context.batting];
   const ballsLeft = Math.max(0, context.overs * 6 - score.balls);
   const runsNeeded = context.target == null ? null : Math.max(0, context.target - score.runs);
   const requiredRate = runsNeeded == null || !ballsLeft || context.result ? null : runsNeeded * 6 / ballsLeft;
-  const boundaries = context.history.filter((ball) => ball.batting === "you" && [4, 5, 6].includes(ball.runs)).length;
-  const wicketsTaken = context.history.filter((ball) => ball.batting === "computer" && ball.wicket).length;
+  const boundaries = context.history.filter((ball) => ball.batting === playerSide && [4, 5, 6].includes(ball.runs)).length;
+  const wicketsTaken = context.history.filter((ball) => ball.batting !== playerSide && ball.wicket).length;
   let streak = 0;
   let bestStreak = 0;
-  for (const ball of context.history.filter((delivery) => delivery.batting === "you")) {
+  for (const ball of context.history.filter((delivery) => delivery.batting === playerSide)) {
     streak = ball.wicket ? 0 : streak + 1;
     bestStreak = Math.max(bestStreak, streak);
   }
@@ -110,7 +110,7 @@ export function handMatchInsights(context) {
     objectives: [
       { label: "Find the rope", detail: "3 boundaries", value: Math.min(boundaries, 3), target: 3 },
       { label: "Break the stand", detail: `${Math.min(context.wicketLimit, 2)} wickets`, value: Math.min(wicketsTaken, 2), target: Math.min(context.wicketLimit, 2) },
-      { label: "Close it out", detail: "Win the match", value: Number(context.result?.winner === "you"), target: 1 },
+      { label: "Close it out", detail: "Win the match", value: Number(context.result?.winner === playerSide), target: 1 },
     ],
   };
 }

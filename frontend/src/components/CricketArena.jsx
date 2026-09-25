@@ -1,19 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
+import { createCricketAvatar } from "../lib/cricketAvatar.js";
+import { synchronizedElapsed } from "../lib/handMultiplayer.js";
 import { DELIVERY_MS } from "../lib/cricketOpponent.js";
 import { returnTimeline, victoryFrame, VICTORY_MS, deliveryShotPlan, deliveryRunningFrame } from "../lib/cricketPresentation.js";
 import { FIELD_POSITIONS, KEEPER_INDEX, TEAM_COLORS, FIELDER_SPEED, CHEER_STAGE_CENTRES, CEREMONY_ORIGIN, inCheerStageBay, TOSS_MS, HANDSHAKE_MS, POST_MATCH_MS, shotPlan, chaseFrame, handshakeLineFrame, awardFrame, cheeringTeam, presentationDuration, tossFrame, dismissalFrame, outcomeDuration, runningFrame } from "../lib/cricketPresentation.js";
 
-export default function CricketArena({ active, phase, lastBall, revealing, cameraView, motion, batting, bowlingLength = "good length", tossStage = "none", tossCoin = null, ceremony = null, awardTeams = "", winner = "tie", onPresentationComplete, onCeremonyComplete }) {
+export default function CricketArena({ active, phase, lastBall, revealing, cameraView, motion, batting, bowlingLength = "good length", tossStage = "none", tossCoin = null, tossTiming = null, ceremony = null, awardTeams = "", winner = "tie", teamNames = null, scoreboard = null, onPresentationComplete, onCeremonyComplete }) {
   const hostRef = useRef(null);
   const stateRef = useRef({ phase, lastBall, revealing, cameraView, motion, batting, bowlingLength, tossStage, tossCoin, ceremony, awardTeams });
   const engineRef = useRef(null);
   const [unavailable, setUnavailable] = useState(false);
 
   useEffect(() => {
-    stateRef.current = { phase, lastBall, revealing, cameraView, motion, batting, bowlingLength, tossStage, tossCoin, ceremony, awardTeams, winner, onPresentationComplete, onCeremonyComplete };
+    stateRef.current = { phase, lastBall, revealing, cameraView, motion, batting, bowlingLength, tossStage, tossCoin, tossTiming, ceremony, awardTeams, winner, teamNames, scoreboard, onPresentationComplete, onCeremonyComplete };
     engineRef.current?.render();
-  }, [phase, lastBall, revealing, cameraView, motion, batting, bowlingLength, tossStage, tossCoin, ceremony, awardTeams, winner, onPresentationComplete, onCeremonyComplete]);
+  }, [phase, lastBall, revealing, cameraView, motion, batting, bowlingLength, tossStage, tossCoin, tossTiming, ceremony, awardTeams, winner, teamNames, scoreboard, onPresentationComplete, onCeremonyComplete]);
 
   useEffect(() => {
     if (!active || (!unavailable && motion) || revealing) return;
@@ -36,9 +38,9 @@ export default function CricketArena({ active, phase, lastBall, revealing, camer
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.5;
+    renderer.toneMappingExposure = 1.3;
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     renderer.domElement.setAttribute("aria-label", "Interactive 3D cricket stadium");
     renderer.domElement.setAttribute("role", "img");
     host.appendChild(renderer.domElement);
@@ -64,7 +66,7 @@ export default function CricketArena({ active, phase, lastBall, revealing, camer
     };
     const box = (size, surface, position, parent) => addMesh(new THREE.BoxGeometry(...size), surface, position, parent);
     const charcoal = material("#1f303c");
-    const pitchMaterial = material("#8f9976");
+    const pitchMaterial = material("#b5ac8a");
     const chalk = material("#e5f3df", { emissive: "#839478", emissiveIntensity: 0.2 });
     const mint = material("#79edc4", { emissive: "#37b991", emissiveIntensity: 1.6 });
     const amber = material("#f0c77b", { emissive: "#b17a2d", emissiveIntensity: 1 });
@@ -92,16 +94,47 @@ export default function CricketArena({ active, phase, lastBall, revealing, camer
     fireworks.frustumCulled = false;
     scene.add(fireworks);
     [sparkGeometry, sparkTexture, sparkMaterial].forEach((resource) => resources.add(resource));
-    const teamKits = { you: material(TEAM_COLORS.you), computer: material(TEAM_COLORS.computer) };
-    const battingKit = material(TEAM_COLORS.you);
-    const bowlingKit = material(TEAM_COLORS.computer);
+    const weavePixels = new Uint8Array(64 * 64 * 4);
+    for (let pixel = 0; pixel < 64 * 64; pixel++) {
+      const thread = (pixel % 64 + Math.floor(pixel / 64)) % 2;
+      const grain = ((pixel * 374761393) ^ (pixel * 668265263 >>> 13)) & 15;
+      weavePixels.set([160 + thread * 50 + grain, 160 + thread * 50 + grain, 160 + thread * 50 + grain, 255], pixel * 4);
+    }
+    const weave = new THREE.DataTexture(weavePixels, 64, 64);
+    weave.wrapS = weave.wrapT = THREE.RepeatWrapping;
+    weave.repeat.set(5, 5);
+    weave.needsUpdate = true;
+    resources.add(weave);
+    const fabric = { roughness: 0.94, bumpMap: weave, bumpScale: 0.006 };
+    const teamKits = { you: material(TEAM_COLORS.you, fabric), computer: material(TEAM_COLORS.computer, fabric) };
+    const battingKit = material(TEAM_COLORS.you, fabric);
+    const bowlingKit = material(TEAM_COLORS.computer, fabric);
     const umpireKit = material("#ffffff");
-    const helmetMaterial = material("#164d40");
-    const skin = material("#b67e58");
+    const helmetMaterial = material("#192e3e", { roughness: 0.3, metalness: 0.12 });
+    const skinTones = ["#b87850", "#8b543b", "#d49b76", "#67432f", "#bb8766", "#e0b290"].map((color) => material(color, { roughness: 0.62, bumpMap: weave, bumpScale: 0.0009 }));
+    const lipTones = ["#895645", "#674035", "#ad7767", "#51382e", "#916453", "#b78270"].map((color) => material(color, { roughness: 0.7 }));
+    const hairTones = ["#191815", "#35251e", "#24221e"].map((color) => material(color, { roughness: 0.98 }));
+    const trim = material("#cad4d8", { roughness: 0.83 });
+    const jerseyNumbers = Array.from({ length: 11 }, (_, index) => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 256;
+      canvas.height = 320;
+      const drawing = canvas.getContext("2d");
+      drawing.fillStyle = "#edf3ed";
+      drawing.textAlign = "center";
+      drawing.font = "600 25px 'Barlow Condensed', sans-serif";
+      drawing.fillText("NIGHTFALL", 128, 55);
+      drawing.font = "700 190px 'Barlow Condensed', sans-serif";
+      drawing.fillText(String(index + 1), 128, 242);
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      resources.add(texture);
+      return texture;
+    });
     const leather = material("#563c2a");
 
-    scene.add(new THREE.HemisphereLight("#ccedff", "#17352d", 2.8));
-    const floodlight = new THREE.DirectionalLight("#f2f7dc", 3.2);
+    scene.add(new THREE.HemisphereLight("#d9e8ee", "#283c30", 1.9));
+    const floodlight = new THREE.DirectionalLight("#fff2df", 2.6);
     floodlight.position.set(-12, 32, 10);
     floodlight.castShadow = true;
     floodlight.shadow.mapSize.set(1024, 1024);
@@ -109,15 +142,23 @@ export default function CricketArena({ active, phase, lastBall, revealing, camer
     floodlight.shadow.bias = -0.001;
     floodlight.shadow.normalBias = 0.08;
     scene.add(floodlight);
-    const rimlight = new THREE.DirectionalLight("#69a9ed", 2);
+    const rimlight = new THREE.DirectionalLight("#9ebfd6", 1.4);
     rimlight.position.set(24, 12, -25);
     scene.add(rimlight);
+    const faceLight = new THREE.DirectionalLight("#edf4ff", 0.8);
+    faceLight.position.set(-4, 6, 18);
+    scene.add(faceLight);
 
-    const turf = addMesh(new THREE.CylinderGeometry(33, 33, 0.6, 96), material("#174a3b"), [0, -0.4, 0]);
+    const grassTexture = weave.clone();
+    grassTexture.repeat.set(420, 420);
+    resources.add(grassTexture);
+    const grassSurface = { bumpMap: grassTexture, bumpScale: 0.025, roughness: 1 };
+    const turf = addMesh(new THREE.CylinderGeometry(33, 33, 0.6, 96), material("#28613d", grassSurface), [0, -0.4, 0]);
     turf.scale.z = 0.86;
+    const mownGrass = [material("#36774c", grassSurface), material("#307046", grassSurface)];
     for (let stripe = -4; stripe <= 4; stripe++) {
       const depth = 2 * Math.sqrt(31 * 31 - (stripe * 6) ** 2) * 0.86;
-      box([3, 0.03, depth], material(stripe % 2 ? "#205b48" : "#23604b"), [stripe * 6, -0.07, 0]);
+      box([3, 0.03, depth], mownGrass[Math.abs(stripe) % 2], [stripe * 6, -0.07, 0]);
     }
     const ring = (radius, thickness, surface, height) => {
       const mesh = addMesh(new THREE.TorusGeometry(radius, thickness, 6, 120), surface, [0, height, 0]);
@@ -125,7 +166,7 @@ export default function CricketArena({ active, phase, lastBall, revealing, camer
       mesh.scale.y = 0.86;
       return mesh;
     };
-    ring(31.2, 0.085, mint, 0.06);
+    ring(31.2, 0.065, chalk, 0.06);
     ring(19, 0.045, chalk, 0.04);
     box([4.4, 0.12, 19], pitchMaterial, [0, 0.02, 0]);
     for (const end of [-1, 1]) {
@@ -151,42 +192,158 @@ export default function CricketArena({ active, phase, lastBall, revealing, camer
 
     const stands = new THREE.Group();
     scene.add(stands);
-    const seatMaterials = [material("#3d657b"), material("#386a5d"), material("#796951")];
+    const standGeometry = new THREE.BoxGeometry(1, 1, 1);
+    resources.add(standGeometry);
+    const seating = new THREE.InstancedMesh(standGeometry, material("#ffffff"), 132);
+    const canopy = new THREE.InstancedMesh(standGeometry, material("#aeb9b4", { roughness: 0.55, metalness: 0.25 }), 44);
+    const canopyTrim = new THREE.InstancedMesh(standGeometry, material("#dcdfd5", { emissive: "#869b91", emissiveIntensity: 0.35 }), 44);
+    const roofSupports = new THREE.InstancedMesh(standGeometry, charcoal, 22);
+    for (const structure of [seating, canopy, canopyTrim, roofSupports]) {
+      structure.count = 0;
+      structure.castShadow = true;
+      structure.receiveShadow = true;
+      stands.add(structure);
+      resources.add(structure);
+    }
+    const standTransform = new THREE.Object3D();
+    const seatColors = [new THREE.Color("#344e61"), new THREE.Color("#485950"), new THREE.Color("#5d6765")];
     for (let tier = 0; tier < 3; tier++) {
       for (let section = 0; section < 44; section++) {
         const angle = section / 44 * Math.PI * 2;
         const radius = 35.5 + tier * 2;
         if (inCheerStageBay(Math.sin(angle) * radius, Math.cos(angle) * radius * 0.86, 2.7)) continue;
-        const stand = box([4.8, 1.7, 2.4], seatMaterials[(section + tier) % 3], [Math.sin(angle) * radius, 1 + tier * 1.4, Math.cos(angle) * radius * 0.86], stands);
-        stand.rotation.y = angle;
+        standTransform.position.set(Math.sin(angle) * radius, 1 + tier * 1.4, Math.cos(angle) * radius * 0.86);
+        standTransform.rotation.set(0, angle, 0);
+        standTransform.scale.set(4.8, 1.7, 2.4);
+        standTransform.updateMatrix();
+        seating.setMatrixAt(seating.count, standTransform.matrix);
+        seating.setColorAt(seating.count++, seatColors[(section + tier) % 3]);
       }
     }
-    const crowdGeometry = new THREE.SphereGeometry(0.22, 6, 4);
+    for (let section = 0; section < 44; section++) {
+      const angle = section / 44 * Math.PI * 2;
+      if (inCheerStageBay(Math.sin(angle) * 38.6, Math.cos(angle) * 33.2, 3.5)) continue;
+      standTransform.position.set(Math.sin(angle) * 38.6, 7.1, Math.cos(angle) * 33.2);
+      standTransform.rotation.set(0, angle, 0);
+      standTransform.rotateX(-0.12);
+      standTransform.scale.set(5.35, 0.18, 7.4);
+      standTransform.updateMatrix();
+      canopy.setMatrixAt(canopy.count++, standTransform.matrix);
+      standTransform.position.set(Math.sin(angle) * 35, 7.55, Math.cos(angle) * 30.1);
+      standTransform.scale.set(5.35, 0.24, 0.14);
+      standTransform.updateMatrix();
+      canopyTrim.setMatrixAt(canopyTrim.count++, standTransform.matrix);
+      if (section % 2 === 0) {
+        standTransform.position.set(Math.sin(angle) * 41.5, 3.5, Math.cos(angle) * 35.7);
+        standTransform.rotation.set(0, angle, 0);
+        standTransform.scale.set(0.2, 7, 0.2);
+        standTransform.updateMatrix();
+        roofSupports.setMatrixAt(roofSupports.count++, standTransform.matrix);
+      }
+    }
+    const crowdGeometry = new THREE.CapsuleGeometry(0.16, 0.24, 2, 6);
+    const headGeometry = new THREE.SphereGeometry(0.115, 6, 4);
     resources.add(crowdGeometry);
-    const crowd = new THREE.InstancedMesh(crowdGeometry, chalk, 1056);
+    resources.add(headGeometry);
+    const crowd = new THREE.InstancedMesh(crowdGeometry, material("#ffffff"), 1056);
+    const crowdHeads = new THREE.InstancedMesh(headGeometry, material("#c79c7c"), 1056);
     const crowdTransform = new THREE.Object3D();
-    const crowdColors = [new THREE.Color("#c8d6d5"), new THREE.Color("#dca05e"), new THREE.Color("#4795a6"), new THREE.Color("#d76c57")];
+    const crowdColors = [new THREE.Color("#d9e0da"), new THREE.Color("#e3be4e"), new THREE.Color("#3c88c9"), new THREE.Color("#cb7768")];
     let visibleSpectators = 0;
     for (let spectator = 0; spectator < 1056; spectator++) {
       const tier = Math.floor(spectator / 352);
       const angle = (spectator % 352) / 352 * Math.PI * 2;
       crowdTransform.position.set(Math.sin(angle) * (35.5 + tier * 2), 2.15 + tier * 1.4, Math.cos(angle) * (35.5 + tier * 2) * 0.86);
       if (inCheerStageBay(crowdTransform.position.x, crowdTransform.position.z, 2.7)) continue;
-      crowdTransform.scale.set(1, 1.7, 1);
+      crowdTransform.scale.set(1, 1, 1);
       crowdTransform.updateMatrix();
       crowd.setMatrixAt(visibleSpectators, crowdTransform.matrix);
       crowd.setColorAt(visibleSpectators, crowdColors[spectator % 4]);
+      crowdTransform.position.y += 0.34;
+      crowdTransform.updateMatrix();
+      crowdHeads.setMatrixAt(visibleSpectators, crowdTransform.matrix);
       visibleSpectators++;
     }
     crowd.count = visibleSpectators;
+    crowdHeads.count = visibleSpectators;
     resources.add(crowd);
-    scene.add(crowd);
+    resources.add(crowdHeads);
+    scene.add(crowd, crowdHeads);
+    const boundaryCanvas = document.createElement("canvas");
+    boundaryCanvas.width = 512;
+    boundaryCanvas.height = 128;
+    const boundaryDrawing = boundaryCanvas.getContext("2d");
+    boundaryDrawing.fillStyle = "#153126";
+    boundaryDrawing.fillRect(0, 0, 512, 128);
+    boundaryDrawing.fillStyle = "#ddeddf";
+    boundaryDrawing.font = "600 62px 'Barlow Condensed', sans-serif";
+    boundaryDrawing.textAlign = "center";
+    boundaryDrawing.fillText("BALLSENSE", 256, 84);
+    boundaryDrawing.fillStyle = "#8bbaa1";
+    boundaryDrawing.fillRect(0, 116, 512, 5);
+    const boundaryTexture = new THREE.CanvasTexture(boundaryCanvas);
+    boundaryTexture.colorSpace = THREE.SRGBColorSpace;
+    const boundarySurface = new THREE.MeshBasicMaterial({ map: boundaryTexture });
+    resources.add(boundaryTexture);
+    resources.add(boundarySurface);
     for (let section = 0; section < 56; section++) {
       const angle = section / 56 * Math.PI * 2;
       if (inCheerStageBay(Math.sin(angle) * 33.2, Math.cos(angle) * 28.5, 1.5)) continue;
-      const board = box([2.8, 0.7, 0.2], section % 4 === 0 ? amber : section % 2 ? blue : mint, [Math.sin(angle) * 33.2, 0.7, Math.cos(angle) * 28.5]);
+      const board = box([2.8, 0.7, 0.2], boundarySurface, [Math.sin(angle) * 33.2, 0.7, Math.cos(angle) * 28.5]);
       board.rotation.y = angle;
     }
+    const screenCanvas = document.createElement("canvas");
+    screenCanvas.width = 1024;
+    screenCanvas.height = 320;
+    const screenDrawing = screenCanvas.getContext("2d");
+    const screenTexture = new THREE.CanvasTexture(screenCanvas);
+    screenTexture.colorSpace = THREE.SRGBColorSpace;
+    const screenSurface = new THREE.MeshBasicMaterial({ map: screenTexture, toneMapped: false });
+    resources.add(screenTexture);
+    resources.add(screenSurface);
+    for (const end of [-1, 1]) {
+      const screen = new THREE.Group();
+      screen.position.set(0, 8.6, end * 35);
+      screen.rotation.y = end === 1 ? Math.PI : 0;
+      scene.add(screen);
+      box([13.2, 4.4, 0.45], charcoal, [0, 0, 0], screen);
+      addMesh(new THREE.PlaneGeometry(12.5, 3.9), screenSurface, [0, 0, 0.24], screen);
+      for (const side of [-1, 1]) box([0.25, 7, 0.3], charcoal, [side * 5, -5.5, 0], screen);
+    }
+    let previousScreen = "";
+    function updateStadiumScreen(state) {
+      const home = state.scoreboard?.scores.you;
+      const away = state.scoreboard?.scores.computer;
+      const homeName = state.teamNames?.you || "YOUR XI";
+      const awayName = state.teamNames?.computer || "COMPUTER XI";
+      const caption = state.tossStage !== "none" ? `THE TOSS / ${state.tossStage.toUpperCase()}` : `INNINGS ${state.scoreboard?.innings || 1} / ${state.phase.toUpperCase()}`;
+      const screenKey = JSON.stringify([home, away, homeName, awayName, caption]);
+      if (screenKey === previousScreen) return;
+      previousScreen = screenKey;
+      screenDrawing.fillStyle = "#0e1c19";
+      screenDrawing.fillRect(0, 0, 1024, 320);
+      screenDrawing.textAlign = "center";
+      screenDrawing.fillStyle = "#b8cdbf";
+      screenDrawing.font = "500 24px 'Barlow Condensed', sans-serif";
+      screenDrawing.fillText("NIGHTFALL ARENA / BALLSENSE", 512, 36);
+      [home, away].forEach((score, index) => {
+        const centre = index ? 760 : 264;
+        screenDrawing.fillStyle = index ? "#efcf5b" : "#93c3ff";
+        screenDrawing.font = "600 30px 'Barlow Condensed', sans-serif";
+        screenDrawing.fillText(index ? awayName : homeName, centre, 93, 430);
+        screenDrawing.font = "600 118px 'Barlow Condensed', sans-serif";
+        screenDrawing.fillText(`${score?.runs || 0}/${score?.wickets || 0}`, centre, 224, 420);
+      });
+      screenDrawing.fillStyle = "#31473a";
+      screenDrawing.fillRect(510, 62, 2, 181);
+      screenDrawing.fillStyle = "#c8dcd0";
+      screenDrawing.font = "500 25px 'Barlow Condensed', sans-serif";
+      screenDrawing.fillText(caption, 512, 291, 940);
+      screenTexture.needsUpdate = true;
+      host.dataset.stadiumScore = `${home?.runs || 0}/${home?.wickets || 0} - ${away?.runs || 0}/${away?.wickets || 0}`;
+    }
+    host.dataset.spectators = String(visibleSpectators);
+    host.dataset.coveredSections = String(canopy.count);
     const lightTowers = [];
     for (const [positionX, positionZ] of [[-28, -24], [28, -24], [-28, 24], [28, 24]]) {
       const tower = new THREE.Group();
@@ -202,69 +359,14 @@ export default function CricketArena({ active, phase, lastBall, revealing, camer
       for (let bulb = 0; bulb < 8; bulb++) box([0.8, 0.6, 0.15], whiteLight, [(bulb % 4 - 1.5) * 1.15, bulb < 4 ? 0.55 : -0.55, 0.2], lamp);
     }
 
+    let avatarIndex = 0;
     function cricketer(position, kit, padded = false, cap = true) {
-      const player = new THREE.Group();
+      const index = avatarIndex++;
+      const formal = kit.userData.formal;
+      const player = createCricketAvatar({ kit, skin: skinTones[index % skinTones.length], hair: hairTones[index % hairTones.length], white: chalk, dark: charcoal, trim: formal ? kit : trim, helmet: helmetMaterial, lip: lipTones[index % lipTones.length], numberMap: formal || kit === umpireKit ? null : jerseyNumbers[index % 11], shoe: formal ? charcoal : chalk, padded, cap, index, resources });
       player.position.set(...position);
       player.userData.home = player.position.clone();
       scene.add(player);
-      const torso = addMesh(new THREE.CylinderGeometry(0.31, 0.25, 0.68, 16), kit, [0, 1.44, 0], player);
-      torso.scale.set(1.25, 1, 0.78);
-      const hips = addMesh(new THREE.SphereGeometry(0.29, 14, 10), kit, [0, 1.06, 0], player);
-      hips.scale.set(1.12, 0.6, 0.85);
-      addMesh(new THREE.CylinderGeometry(0.105, 0.12, 0.17, 10), skin, [0, 1.85, 0], player);
-      const collar = addMesh(new THREE.TorusGeometry(0.13, 0.026, 6, 18), chalk, [0, 1.79, 0], player);
-      collar.rotation.x = Math.PI / 2;
-      box([0.075, 0.15, 0.015], chalk, [0.16, 1.58, -0.245], player);
-      const head = new THREE.Group();
-      head.position.y = 2.03;
-      player.add(head);
-      addMesh(new THREE.SphereGeometry(0.22, 14, 10), skin, [0, 0, 0], head);
-      addMesh(new THREE.SphereGeometry(0.045, 8, 6), skin, [0, -0.025, -0.215], head);
-      for (const side of [-1, 1]) {
-        addMesh(new THREE.SphereGeometry(0.021, 8, 6), charcoal, [side * 0.078, 0.035, -0.201], head);
-        addMesh(new THREE.SphereGeometry(0.045, 8, 6), skin, [side * 0.21, -0.01, 0], head);
-      }
-      if (padded) {
-        addMesh(new THREE.SphereGeometry(0.255, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.6), helmetMaterial, [0, 0.025, 0], head);
-        box([0.44, 0.035, 0.25], helmetMaterial, [0, 0.08, -0.23], head);
-        for (const height of [-0.04, -0.12]) box([0.38, 0.015, 0.025], charcoal, [0, height, -0.24], head);
-      } else if (cap) {
-        box([0.4, 0.09, 0.36], kit, [0, 0.18, 0], head);
-      }
-      const arms = [];
-      const elbows = [];
-      const legs = [];
-      const knees = [];
-      const hands = [];
-      for (const side of [-1, 1]) {
-        const arm = new THREE.Group();
-        arm.position.set(side * 0.36, 1.72, 0);
-        player.add(arm);
-        addMesh(new THREE.SphereGeometry(0.15, 12, 8), kit, [0, -0.035, 0], arm);
-        addMesh(new THREE.CapsuleGeometry(0.125, 0.23, 6, 12), kit, [0, -0.18, 0], arm);
-        const elbow = new THREE.Group();
-        elbow.position.y = -0.38;
-        arm.add(elbow);
-        addMesh(new THREE.CapsuleGeometry(0.1, 0.21, 6, 12), skin, [0, -0.18, 0], elbow);
-        const hand = addMesh(new THREE.SphereGeometry(padded ? 0.12 : 0.095, 12, 8), padded ? chalk : skin, [0, -0.38, 0], elbow);
-        hand.scale.set(0.85, 1.2, 0.65);
-        hands.push(hand);
-        const leg = new THREE.Group();
-        leg.position.set(side * 0.18, 1.02, 0);
-        player.add(leg);
-        addMesh(new THREE.CapsuleGeometry(0.15, 0.24, 6, 12), kit, [0, -0.23, 0], leg);
-        const knee = new THREE.Group();
-        knee.position.y = -0.46;
-        leg.add(knee);
-        addMesh(new THREE.CapsuleGeometry(0.125, 0.24, 6, 12), kit, [0, -0.2, 0], knee);
-        box([0.23, 0.13, 0.4], chalk, [0, -0.42, -0.09], knee);
-        if (padded) {
-          box([0.24, 0.52, 0.14], chalk, [0, -0.13, -0.12], knee);
-          for (const offset of [-0.07, 0, 0.07]) box([0.014, 0.45, 0.015], kit, [offset, -0.13, -0.2], knee);
-        }
-        arms.push(arm); elbows.push(elbow); legs.push(leg); knees.push(knee);
-      }
-      player.userData = { ...player.userData, torso, head, arms, elbows, legs, knees, hands };
       return player;
     }
     const batter = cricketer([0.65, 0.05, 7], battingKit, true);
@@ -280,23 +382,23 @@ export default function CricketArena({ active, phase, lastBall, revealing, camer
     bowler.rotation.y = Math.PI;
     const keeper = cricketer([0, 0.05, 11], bowlingKit, true);
     const fielders = FIELD_POSITIONS.map(([positionX, positionZ]) => cricketer([positionX, 0.05, positionZ], bowlingKit));
-    const umpire = cricketer([1.3, 0.05, -11], umpireKit);
-    box([0.65, 0.05, 0.6], umpireKit, [0, 2.21, 0], umpire);
-    const umpireFinger = addMesh(new THREE.CapsuleGeometry(0.026, 0.13, 4, 8), skin, [0, -0.53, 0], umpire.userData.elbows[1]);
+    const umpire = cricketer([1.3, 0.05, -11], umpireKit, false, false);
+    addMesh(new THREE.CylinderGeometry(0.235, 0.235, 0.018, 32), umpireKit, [0, 0.08, 0], umpire.userData.head);
+    addMesh(new THREE.CylinderGeometry(0.118, 0.147, 0.1, 24), umpireKit, [0, 0.125, 0.008], umpire.userData.head);
+    const umpireFinger = addMesh(new THREE.CapsuleGeometry(0.014, 0.09, 4, 8), umpire.userData.skinMaterial, [0, -0.5, 0], umpire.userData.elbows[1]);
     umpireFinger.visible = false;
     const allPlayers = [batter, nonStriker, bowler, keeper, ...fielders, umpire];
     const captains = [cricketer([-1.6, 0.05, 0.4], teamKits.you), cricketer([1.6, 0.05, 0.4], teamKits.computer)];
     const squads = ["you", "computer"].map((team, teamIndex) => [captains[teamIndex], ...Array.from({ length: 10 }, () => cricketer([0, 0.05, 0], teamKits[team]))]);
     const suit = material("#111215", { roughness: 0.9 });
+    suit.userData.formal = true;
     const presenter = cricketer([2.3, 0.05, 0], suit, false, false);
-    box([0.18, 0.4, 0.018], umpireKit, [0, 1.53, -0.25], presenter);
-    box([0.045, 0.32, 0.025], charcoal, [0, 1.5, -0.27], presenter);
+    box([0.13, 0.3, 0.012], umpireKit, [0, 1.56, -0.171], presenter);
+    box([0.035, 0.26, 0.016], charcoal, [0, 1.55, -0.186], presenter);
     for (const side of [-1, 1]) {
-      const lapel = box([0.11, 0.43, 0.025], suit, [side * 0.12, 1.51, -0.27], presenter);
+      const lapel = box([0.08, 0.33, 0.022], suit, [side * 0.095, 1.55, -0.18], presenter);
       lapel.rotation.z = side * -0.23;
     }
-    presenter.userData.knees.forEach((knee) => box([0.24, 0.14, 0.42], suit, [0, -0.42, -0.1], knee));
-    addMesh(new THREE.SphereGeometry(0.225, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.43), suit, [0, 0.025, 0], presenter.userData.head);
     const stages = ["you", "computer"].map((team, index) => {
       const stage = new THREE.Group();
       const [centreX, centreZ] = CHEER_STAGE_CENTRES[index];
@@ -320,9 +422,8 @@ export default function CricketArena({ active, phase, lastBall, revealing, camer
     const cheerSquads = ["you", "computer"].map((team, teamIndex) => Array.from({ length: 4 }, (_, index) => {
       const [centreX, centreZ] = CHEER_STAGE_CENTRES[teamIndex];
       const dancer = cricketer([centreX + (index - 1.5) * 1.3, 0.75, centreZ], teamKits[team], false, false);
-      box([0.63, 0.075, 0.42], chalk, [0, 1.16, 0], dancer);
-      addMesh(new THREE.SphereGeometry(0.23, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), leather, [0, 0.02, 0], dancer.userData.head);
-      addMesh(new THREE.SphereGeometry(0.13, 10, 8), leather, [0, -0.07, 0.23], dancer.userData.head);
+      box([0.43, 0.045, 0.28], chalk, [0, 1.1, 0], dancer);
+      addMesh(new THREE.CapsuleGeometry(0.055, 0.18, 6, 12), hairTones[1], [0, -0.055, 0.133], dancer.userData.head);
       dancer.userData.hands.forEach((hand) => {
         addMesh(new THREE.IcosahedronGeometry(0.23, 1), teamKits[team], [0, -0.12, 0], hand);
         for (let ribbon = 0; ribbon < 8; ribbon++) {
@@ -348,6 +449,7 @@ export default function CricketArena({ active, phase, lastBall, revealing, camer
     scene.add(coin);
     const edge = addMesh(new THREE.CylinderGeometry(0.3, 0.3, 0.055, 48), material("#d5b966", { metalness: 0.8, roughness: 0.25 }), [0, 0, 0], coin);
     edge.rotation.x = Math.PI / 2;
+    const coinFaces = [];
     for (const [index, label] of ["HEADS", "TAILS"].entries()) {
       const canvas = document.createElement("canvas");
       canvas.width = canvas.height = 256;
@@ -370,17 +472,20 @@ export default function CricketArena({ active, phase, lastBall, revealing, camer
       resources.add(surface);
       const face = addMesh(new THREE.CircleGeometry(0.297, 48), surface, [0, 0, index ? -0.029 : 0.029], coin);
       face.rotation.y = index ? Math.PI : 0;
+      coinFaces.push(face);
     }
 
     function pose(player, stride = 0, celebration = 0) {
       const rig = player.userData;
-      rig.torso.rotation.x = Math.abs(stride) * 0.08;
-      rig.head.rotation.set(0, 0, -stride * 0.025);
-      rig.arms.forEach((arm, index) => { arm.rotation.set(stride * (index ? -0.7 : 0.7), 0, celebration * (index ? -2.5 : 2.5)); });
-      rig.elbows.forEach((elbow) => { elbow.rotation.set(-0.18 - Math.abs(stride) * 0.5, 0, 0); });
+      const breath = stateRef.current.motion ? Math.sin(performance.now() * 0.0018 + rig.variation * 1.7) * 0.006 : 0;
+      rig.torso.rotation.set(-Math.abs(stride) * 0.08, stride * 0.035, stride * 0.018);
+      rig.torso.scale.set(1 + breath * 0.3, 1 + breath, 1 + breath);
+      rig.head.rotation.set(Math.abs(stride) * 0.035, -stride * 0.04, -stride * 0.018);
+      rig.arms.forEach((arm, index) => { arm.rotation.set(stride * (index ? -0.65 : 0.65) - 0.035, 0, (0.045 + celebration * 2.4) * (index ? -1 : 1)); });
+      rig.elbows.forEach((elbow) => { elbow.rotation.set(-0.12 - Math.abs(stride) * 0.6, 0, 0); });
       rig.legs.forEach((leg, index) => { leg.rotation.x = stride * (index ? 0.75 : -0.75); });
       rig.knees.forEach((knee, index) => { knee.rotation.x = Math.max(0, stride * (index ? -1 : 1)) * 1.1; });
-      player.position.y = player.userData.home.y + Math.abs(stride) * 0.045;
+      player.position.y = player.userData.home.y + Math.abs(stride) * 0.027;
     }
 
     const down = new THREE.Vector3(0, -1, 0);
@@ -472,6 +577,7 @@ export default function CricketArena({ active, phase, lastBall, revealing, camer
     function render(time = performance.now()) {
       if (lost || !host.clientWidth || !host.clientHeight) return;
       const state = stateRef.current;
+      updateStadiumScreen(state);
       const delta = Math.min((time - lastTime) / 1000 || 0, 0.05);
       lastTime = time;
       if (state.lastBall !== previousBall || state.revealing !== previousReveal) {
@@ -750,6 +856,8 @@ export default function CricketArena({ active, phase, lastBall, revealing, camer
         captain.userData.head.rotation.x = state.tossStage === "flipping" ? -0.25 : 0.15;
       });
       coin.visible = tossing && ["flipping", "landed", "result"].includes(state.tossStage);
+      coinFaces.forEach((face) => { face.visible = state.tossCoin != null; });
+      host.dataset.coinFace = coin.visible && state.tossCoin != null ? state.tossCoin : "hidden";
       if (tossing) {
         allPlayers.forEach((player) => { player.visible = player === umpire; });
         umpire.position.set(0, 0.05, -0.6);
@@ -758,14 +866,17 @@ export default function CricketArena({ active, phase, lastBall, revealing, camer
         reach(umpire, [[-0.2, 1.3, -0.5], [0.2, 1.3, -0.5]]);
         umpireFinger.visible = false;
         ball.visible = false;
-        const flight = state.tossStage === "flipping" && state.motion ? Math.min((time - tossStarted) / TOSS_MS, 1) : 1;
+        const tossElapsed = synchronizedElapsed(state.tossTiming?.startedAt, state.tossTiming?.serverOffset) ?? time - tossStarted;
+        const handshakeElapsed = synchronizedElapsed(state.tossTiming?.stageStartedAt, state.tossTiming?.serverOffset) ?? time - tossStageStarted;
+        const flight = state.tossStage === "flipping" && state.motion ? Math.min(tossElapsed / TOSS_MS, 1) : 1;
+        host.dataset.tossProgress = flight.toFixed(3);
         const flip = state.tossStage === "flipping";
         const coinFrame = tossFrame(flight);
         coin.position.set(0, coinFrame.height, 0.65);
         coin.rotation.set(-Math.PI / 2 + (flip ? coinFrame.spin : 0), state.tossCoin === "tails" ? Math.PI : 0, 0);
         umpire.userData.arms[1].rotation.x -= flip ? Math.sin(flight * Math.PI) * 0.6 : 0;
         if (state.tossStage === "handshake" || state.tossStage === "complete") {
-          shakeHands(captains, state.motion && state.tossStage === "handshake" ? Math.min((time - tossStageStarted) / HANDSHAKE_MS, 1) : 0.6);
+          shakeHands(captains, state.motion && state.tossStage === "handshake" ? Math.min(handshakeElapsed / HANDSHAKE_MS, 1) : 0.6);
           umpire.position.z = -1.8;
         }
       }
@@ -897,6 +1008,11 @@ export default function CricketArena({ active, phase, lastBall, revealing, camer
           }
         }
       }
+      if (director && state.phase === "setup" && !tossing && !state.ceremony) {
+        cameraTarget.set(compact ? -3.8 : -3.4, compact ? 2.75 : 2.45, compact ? 1.1 : 2.2);
+        lookTarget.set(0.5, 1.05, 7);
+        cameraShot = "AT THE CREASE / PLAYER VIEW";
+      }
       if (tossing) {
         cameraTarget.set(4, 4.3, 8);
         lookTarget.set(0, 1.7, 0);
@@ -920,7 +1036,7 @@ export default function CricketArena({ active, phase, lastBall, revealing, camer
         const [positionX, positionZ] = CHEER_STAGE_CENTRES[cheering === "you" ? 0 : 1];
         cameraTarget.set(positionX + 0.5, compact ? 5.2 : 4.1, positionZ + (compact ? 14 : 10.5));
         lookTarget.set(positionX, 1.65, positionZ);
-        cameraShot = cheering === "you" ? "YOUR XI / BOUNDARY STAGE" : "COMPUTER XI / BOUNDARY STAGE";
+        cameraShot = `${state.teamNames?.[cheering] || (cheering === "you" ? "YOUR XI" : "COMPUTER XI")} / BOUNDARY STAGE`;
       }
       if (state.ceremony) {
         cameraTarget.set(state.ceremony === "award" ? 1.4 : 8, state.ceremony === "award" ? 3.2 : 7, state.ceremony === "award" ? 8 : 15);
