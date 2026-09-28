@@ -2,7 +2,7 @@ import { assign, createMachine } from "xstate";
 import seedrandom from "seedrandom";
 import chaseModel from "./chaseModel.json" with { type: "json" };
 import { matchState } from "./liveMatches.js";
-import { DISMISSALS, CATCH_POSITIONS } from "./cricketPresentation.js";
+import { dismissalForShot, CATCH_POSITIONS, KEEPER_INDEX } from "./cricketPresentation.js";
 
 const emptyScore = () => ({ runs: 0, wickets: 0, balls: 0 });
 export const initialHandContext = () => ({
@@ -15,10 +15,14 @@ const inningsOver = (context) => context.scores[context.batting].wickets >= cont
 
 function scoreDelivery(context, event) {
   const wicket = event.you === event.computer;
-  const runs = wicket ? 0 : event[context.batting];
+  const attemptedRuns = event[context.batting];
+  const runs = wicket ? 0 : attemptedRuns;
+  const length = event.length || "good length";
+  const dismissal = wicket ? dismissalForShot(attemptedRuns, event.dismissal, length) : null;
+  const keeperCatch = dismissal === "caught" && attemptedRuns <= 3;
   const previous = context.scores[context.batting];
   const score = { runs: previous.runs + runs, wickets: previous.wickets + Number(wicket), balls: previous.balls + 1 };
-  const delivery = { you: event.you, computer: event.computer, runs, wicket, batting: context.batting, ball: score.balls, innings: context.innings, length: event.length || "good length", dismissal: wicket ? DISMISSALS.includes(event.dismissal) ? event.dismissal : "bowled" : null, side: event.side === -1 ? -1 : 1, fielderIndex: Number.isInteger(event.fielderIndex) && CATCH_POSITIONS[event.fielderIndex] && (event.fielderIndex < CATCH_POSITIONS.length - 1 || event.dismissal === "caught") ? event.fielderIndex : 0 };
+  const delivery = { you: event.you, computer: event.computer, runs, attemptedRuns, wicket, batting: context.batting, ball: score.balls, innings: context.innings, length, dismissal, side: event.side === -1 ? -1 : 1, fielderIndex: Number.isInteger(event.fielderIndex) && CATCH_POSITIONS[event.fielderIndex] && (event.fielderIndex < KEEPER_INDEX || keeperCatch || !wicket && event.dismissal === "caught") ? event.fielderIndex : 0 };
   delivery.noBall = !wicket && runs === 5;
   delivery.batRuns = delivery.noBall ? 4 : runs;
   delivery.extras = Number(delivery.noBall);

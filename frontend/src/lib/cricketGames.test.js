@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createActor } from "xstate";
 import seedrandom from "seedrandom";
 import chaseModel from "./chaseModel.json" with { type: "json" };
-import { returnTimeline, victoryFrame, VICTORY_MS, deliveryRunningFrame } from "./cricketPresentation.js";
+import { returnTimeline, victoryFrame, VICTORY_MS, deliveryRunningFrame, RECOVERY_MS, movementFacing, recoveryFrame, bowlingFrame } from "./cricketPresentation.js";
 import { DISMISSALS, FIELD_POSITIONS, CATCH_POSITIONS, KEEPER_INDEX, CHEER_MS, TEAM_COLORS, FIELDER_SPEED, CHEER_STAGE_CENTRES, CEREMONY_ORIGIN, inCheerStageBay, shotPlan, chaseFrame, handshakeLineFrame, awardFrame, cheeringTeam, presentationDuration, matchSummary, tossFrame, dismissalFrame, outcomeDuration, runningFrame, samplePresentation } from "./cricketPresentation.js";
 import { opponentPlan, sampleOpponent, training } from "./cricketOpponent.js";
 import { formatOvers, handCricketMachine, handMatchInsights, oversToBalls, SCENARIO_PRESETS, scenarioFromMatch, simulateChase, validateScenario } from "./cricketGames.js";
@@ -58,6 +58,10 @@ test("overthrows resume only after a missed throw and direct hits occur after sa
     const timing = returnTimeline(delivery);
     assert.equal(deliveryRunningFrame(delivery, timing.missAt, timing).completed, 1);
     assert.equal(deliveryRunningFrame(delivery, timing.missAt, timing).moving, false);
+    const turning = deliveryRunningFrame(delivery, timing.extraStart - 100, timing);
+    assert.equal(turning.moving, false);
+    assert.ok(turning.batterFacing > 0 && turning.batterFacing < Math.PI);
+    assert.ok(Math.abs(deliveryRunningFrame(delivery, timing.extraStart - 1, timing).batterFacing - deliveryRunningFrame(delivery, timing.extraStart, timing).batterFacing) < 0.001);
     assert.equal(deliveryRunningFrame(delivery, timing.extraStart + 500, timing).moving, true);
     assert.equal(deliveryRunningFrame(delivery, timing.runningEnd, timing).completed, runs);
     assert.ok(timing.caughtAt > timing.runningEnd);
@@ -101,6 +105,36 @@ test("precommitted fielding variants are occasional and never change the score",
     assert.equal(actor.getSnapshot().context.lastBall.runs, runs);
   }
   actor.stop();
+});
+
+test("all hands score consistently and dismissals follow the attempted shot and length", () => {
+  for (const choice of ["bat", "bowl"]) for (let you = 1; you <= 6; you++) for (let computer = 1; computer <= 6; computer++) {
+    for (const candidate of DISMISSALS) for (const length of ["good length", "yorker", "short"]) {
+      const actor = startGame({ choice });
+      actor.send({ type: "BALL", you, computer, length, dismissal: candidate, fielderIndex: KEEPER_INDEX, overthrow: true, directHit: true });
+      const { context } = actor.getSnapshot();
+      const ball = context.lastBall;
+      const attempted = choice === "bat" ? you : computer;
+      assert.equal(ball.attemptedRuns, attempted);
+      assert.equal(ball.wicket, you === computer);
+      assert.equal(ball.runs, ball.wicket ? 0 : attempted);
+      assert.equal(ball.batRuns + ball.extras, ball.runs);
+      assert.equal(context.scores[context.batting].balls, 1);
+      if (ball.wicket) {
+        assert.equal(ball.overthrow, false);
+        assert.equal(ball.directHit, false);
+        assert.equal(ball.noBall, false);
+        if (attempted >= 4) {
+          assert.notEqual(ball.dismissal, "runout");
+          assert.ok(ball.fielderIndex < KEEPER_INDEX);
+        }
+        if (attempted === 6) assert.ok(["bowled", "caught"].includes(ball.dismissal));
+        if (length === "short") assert.ok(["caught", "runout"].includes(ball.dismissal));
+        if (attempted <= 3 && candidate === "runout") assert.equal(ball.dismissal, "runout");
+      } else assert.equal(ball.dismissal, null);
+      actor.stop();
+    }
+  }
 });
 
 test("victory poses respect either winner, ties and continuous handshake assembly", () => {
@@ -154,9 +188,10 @@ test("20,000 seeded presentation cases preserve scoring and coherent dismissal t
     const ball = actor.getSnapshot().context.lastBall;
     assert.equal(ball.wicket, you === computer);
     assert.equal(ball.runs, ball.wicket ? 0 : ball.batting === "you" ? you : computer);
-    assert.equal(ball.dismissal, ball.wicket ? presentation.dismissal : null);
-    assert.equal(ball.fielderIndex, presentation.fielderIndex);
-    assert.equal(outcomeDuration(ball), ball.wicket ? frame.duration : ball.overthrow ? returnTimeline(ball).runningEnd : ball.runs === 5 ? 3300 : [1, 2, 3].includes(ball.runs) ? 500 + ball.runs * 1500 : 1700);
+    const expectedDismissal = you >= 4 && presentation.dismissal === "runout" || you === 6 && presentation.dismissal === "lbw" ? "caught" : presentation.dismissal;
+    assert.equal(ball.dismissal, ball.wicket ? expectedDismissal : null);
+    assert.equal(ball.fielderIndex, ball.wicket && you >= 4 && presentation.fielderIndex === KEEPER_INDEX ? 0 : presentation.fielderIndex);
+    assert.equal(outcomeDuration(ball), ball.wicket ? dismissalFrame(expectedDismissal, progress).duration : ball.overthrow ? returnTimeline(ball).runningEnd : ball.runs === 5 ? 3300 : [1, 2, 3].includes(ball.runs) ? 500 + ball.runs * 1500 : 1700);
   }
   actor.stop();
   for (const count of fielderCounts.slice(0, KEEPER_INDEX)) assert.ok(count > 1800 && count < 2500, `Fielder sample count: ${count}`);
@@ -423,7 +458,7 @@ test("arena results and one-wicket objectives remain attainable", () => {
 test("dismissal contact moments and replay frames are stable at their endpoints", () => {
   const catchFrame = dismissalFrame("caught", 0.6, -1);
   assert.deepEqual(catchFrame.fielder, [-7, 0.05, -4]);
-  assert.ok(Math.abs(catchFrame.ball[0] + 7) < 1e-8);
+  assert.ok(Math.abs(Math.hypot(catchFrame.ball[0] + 7, catchFrame.ball[2] + 4) - 0.4) < 1e-8);
   assert.equal(catchFrame.stage, "held");
   assert.equal(dismissalFrame("caught", 1).ballVisible, true);
   assert.equal(dismissalFrame("runout", 0.699).brokenEnd, null);
@@ -432,6 +467,62 @@ test("dismissal contact moments and replay frames are stable at their endpoints"
   assert.equal(dismissalFrame("lbw", 0.5).signal, 0);
   assert.equal(dismissalFrame("lbw", 1).signal, 1);
   assert.equal(dismissalFrame("lbw", 1).bails, 0);
+});
+
+test("moving players face their travel direction, including catch and runout fielders", () => {
+  for (const target of [[4, 0, 8], [-4, 0, 8], [4, 0, -8], [-4, 0, -8]]) {
+    const facing = movementFacing([0, 0, 0], target);
+    assert.ok(-Math.sin(facing) * target[0] - Math.cos(facing) * target[2] > 0);
+  }
+  for (const kind of ["caught", "runout"]) {
+    FIELD_POSITIONS.forEach((_, index) => {
+      const first = dismissalFrame(kind, 0.1, 1, index);
+      const next = dismissalFrame(kind, 0.11, 1, index);
+      assert.ok(-Math.sin(first.fielderFacing) * (next.fielder[0] - first.fielder[0]) - Math.cos(first.fielderFacing) * (next.fielder[2] - first.fielder[2]) > 0);
+    });
+  }
+});
+
+test("bowling releases continuously from the middle of the wicket", () => {
+  const release = bowlingFrame(0.58);
+  assert.equal(bowlingFrame(0.579).released, false);
+  assert.equal(release.released, true);
+  assert.ok(Math.abs(release.position[0] - 0.3 - release.ball[0]) < 1e-8);
+  assert.ok(Math.abs(release.position[1] + 1.72 + 0.76 - release.ball[1]) < 1e-8);
+  assert.ok(Math.abs(release.position[2] - release.ball[2]) < 1e-8);
+  assert.ok(release.position[2] > -8.4 && release.position[2] <= -7.3);
+  for (let sample = 0; sample <= 580; sample++) {
+    const running = bowlingFrame(sample / 1000);
+    if (Math.abs(running.position[2] + 8.4) < 0.25) assert.ok(running.position[0] > 0.7);
+  }
+  for (const length of ["short", "good length", "yorker"]) {
+    let previous = release;
+    for (let sample = 59; sample <= 100; sample++) {
+      const current = bowlingFrame(sample / 100, length);
+      assert.equal(current.ball[0], 0);
+      assert.ok(current.ball[2] >= previous.ball[2]);
+      assert.ok(current.ball[1] >= 0.17);
+      assert.ok(Math.abs(current.arm - previous.arm) < 0.12);
+      previous = current;
+    }
+    assert.ok(Math.abs(previous.ball[2] - 7) < 1e-8);
+  }
+});
+
+test("recovery turns players before moving and finishes exactly at home", () => {
+  const start = [0.65, 0.05, -7];
+  const home = [0.65, 0.05, 7];
+  assert.deepEqual(recoveryFrame(start, home, 0, -0.25, 0).position, start);
+  for (let elapsed = 250; elapsed < RECOVERY_MS * 0.85; elapsed += 50) {
+    const frame = recoveryFrame(start, home, 0, -0.25, elapsed);
+    assert.ok(-Math.cos(frame.facing) > 0.99);
+    assert.ok(frame.position[2] >= start[2] && frame.position[2] <= home[2]);
+  }
+  const end = recoveryFrame(start, home, 0, -0.25, RECOVERY_MS);
+  assert.deepEqual(end.position, home);
+  assert.ok(Math.abs(Math.sin(end.facing + 0.25)) < 1e-8);
+  assert.equal(end.moving, false);
+  assert.equal(end.complete, true);
 });
 
 test("batters complete exactly 1, 2, or 3 crossings and turn at each crease", () => {
@@ -446,6 +537,15 @@ test("batters complete exactly 1, 2, or 3 crossings and turn at each crease", ()
     const end = runningFrame(runs, outcomeDuration({ runs }));
     assert.equal(end.moving, false);
     assert.deepEqual(end, runningFrame(runs, 100000));
+    for (let elapsed = 510; elapsed < outcomeDuration({ runs }); elapsed += 10) {
+      const current = runningFrame(runs, elapsed);
+      const next = runningFrame(runs, elapsed + 1);
+      if (current.moving && next.moving) {
+        assert.ok(-Math.cos(current.batterFacing) * (next.batterZ - current.batterZ) > 0);
+        assert.ok(-Math.cos(current.runnerFacing) * (next.runnerZ - current.runnerZ) > 0);
+      }
+      assert.ok(Math.abs(next.batterFacing - current.batterFacing) < 0.02);
+    }
   }
   assert.equal(runningFrame(4, 5000).completed, 0);
   assert.equal(runningFrame(6, 5000).completed, 0);
@@ -463,7 +563,7 @@ test("all fielders are selectable and own their catch or runout paths", () => {
       const end = dismissalFrame(kind, 1, 1, index);
       assert.deepEqual(end.fielder, [position[0] * 0.9, 0.05, position[1] * 0.9]);
       const contact = dismissalFrame(kind, kind === "caught" ? 0.6 : 0.32, 1, index);
-      assert.ok(Math.abs(contact.ball[0] - end.fielder[0]) < 1e-8);
+      assert.ok(Math.abs(contact.ball[0] - end.fielder[0]) <= 0.4);
     }
   });
   assert.equal(selected.size, FIELD_POSITIONS.length);
@@ -491,11 +591,11 @@ test("cheers follow the scoring team or wicket-taking team after the outcome", (
     for (const runs of [1, 2, 3, 4, 5, 6]) {
       const ball = { batting, runs, wicket: false };
       assert.equal(cheeringTeam(ball), [4, 5, 6].includes(runs) ? batting : null);
-      assert.equal(presentationDuration(ball), [4, 5, 6].includes(runs) ? outcomeDuration(ball) + CHEER_MS : returnTimeline(ball).caughtAt + 350);
+      assert.equal(presentationDuration(ball), ([4, 5, 6].includes(runs) ? outcomeDuration(ball) + CHEER_MS : returnTimeline(ball).caughtAt + 350) + RECOVERY_MS);
     }
     const ball = { batting, wicket: true, dismissal: "caught" };
     assert.equal(cheeringTeam(ball), batting === "you" ? "computer" : "you");
-    assert.equal(presentationDuration(ball), outcomeDuration(ball) + CHEER_MS);
+    assert.equal(presentationDuration(ball), outcomeDuration(ball) + CHEER_MS + RECOVERY_MS);
   }
 });
 

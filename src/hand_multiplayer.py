@@ -200,19 +200,28 @@ class Room:
         context = self.context
         batting = context["batting"]
         wicket = self.pending["you"] == self.pending["computer"]
-        runs = 0 if wicket else self.pending[batting]
+        attempted_runs = self.pending[batting]
+        runs = 0 if wicket else attempted_runs
         score = context["scores"][batting]
         score["runs"] += runs
         score["wickets"] += int(wicket)
         score["balls"] += 1
         dismissal = secrets.choice(("bowled", "caught", "lbw", "runout")) if wicket else None
+        length = secrets.choice(("yorker", "good length", "short"))
+        if wicket and (
+            attempted_runs >= 4 and dismissal == "runout"
+            or attempted_runs == 6 and dismissal == "lbw"
+            or length == "short" and dismissal in ("bowled", "lbw")
+        ):
+            dismissal = "caught"
+        keeper_catch = dismissal == "caught" and attempted_runs <= 3
         overthrow = not wicket and runs in (2, 3) and secrets.randbelow(100) < 30
         delivery = {
-            **self.pending, "runs": runs, "wicket": wicket, "batting": batting,
+            **self.pending, "runs": runs, "attemptedRuns": attempted_runs, "wicket": wicket, "batting": batting,
             "ball": score["balls"], "innings": context["innings"],
-            "length": secrets.choice(("yorker", "good length", "short")),
+            "length": length,
             "dismissal": dismissal, "side": secrets.choice((-1, 1)),
-            "fielderIndex": secrets.randbelow(10 if dismissal == "caught" else 9),
+            "fielderIndex": secrets.randbelow(10 if keeper_catch else 9),
             "noBall": not wicket and runs == 5, "batRuns": 4 if runs == 5 else runs,
             "extras": int(not wicket and runs == 5), "overthrow": overthrow,
             "directHit": not wicket and not overthrow and runs in (1, 2, 3) and secrets.randbelow(100) < 25,

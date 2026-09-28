@@ -195,11 +195,15 @@ Open **http://localhost:5173** in your browser. The Vite dev server automaticall
 
 ### Play Hand Cricket With a Friend
 
-1. Open **Hand Cricket > Play with a friend**. Enter a name, choose overs and wickets, and create a private room. The creator is the **Home captain**, wearing blue.
+1. Open **Hand Cricket > Online 1v1**. Enter a name, choose overs and wickets, and create a private room. The creator is the **Home captain**, wearing blue.
 2. Share the six-character room code or the invite link. Your friend joins as the **Away captain**, wearing yellow. Both screens show the captains, their roles, and their connection/readiness status.
 3. Both players select **Ready for toss**. Only the **Away captain** calls **Heads** or **Tails**. Both watch the same server-timed coin flip, landing, and result. Each selects **Continue**, the captains shake hands, and only then can the toss winner choose **Bat first** or **Bowl first**. Both players confirm they are ready to play.
 4. Each player locks a number from 1 to 6. The server reveals neither pending number until both have submitted. Matching numbers take a wicket; otherwise the batter's number scores. The existing five rule is preserved: four batting runs plus one counted no-ball extra, without a free hit.
 5. Both players confirm the innings change. After the result, either can request a rematch; both must accept before the game resets.
+
+Dismissals follow the attempted shot in both modes: run-outs are limited to 1-3 run attempts, six attempts can be caught or bowled, and short deliveries cannot produce bowled or LBW dismissals. Boundary attempts cannot be caught by the keeper. Wickets score zero runs; successful hand values still score exactly their value, including the existing five-run variant above. These are hand-cricket rules and presentation choices, not a simulation of every cricket law.
+
+Each delivery finishes its running, fielding, or wicket sequence, then smoothly returns players to their starting positions before the next pick unlocks. Completed results remain in the scorecard, not as a frozen arena scene. Reduced-motion and unavailable-3D modes also advance automatically.
 
 For phones or laptops on the same trusted network, start the frontend with:
 
@@ -214,6 +218,21 @@ Room sessions use private, randomly generated seat tokens stored in `sessionStor
 Solo and multiplayer share the upgraded stadium: covered spectator stands, textured turf, boundary advertising, and in-ground screens displaying the actual team names and scores. A separate broadcast score strip keeps totals clear of the pitch. Broadcast, pitch, and director cameras, reduced motion, sound, and fullscreen remain available.
 
 **Hosting limits:** This version uses in-memory rooms in **one Uvicorn worker**, with up to 200 rooms and 15-minute inactive-room expiry. Server restarts remove rooms; there are no accounts, public matchmaking, permanent leaderboards, or database-backed match history. No cricket-data API or AI key is needed for multiplayer itself. For internet play, deploy the frontend and backend behind HTTPS with WebSocket upgrades (`wss://`), allow the exact frontend origins in `CORS_ORIGINS`, and apply edge rate/connection limits. Do not expose the Vite development server as a public production service. Multiple workers or persistent rooms require a shared store and coordination, such as Redis.
+
+#### Separate Render Services
+
+For the current frontend static site and backend web service, configure:
+
+| Render service | Environment variable | Value |
+| --- | --- | --- |
+| Frontend | `VITE_API_BASE` | `https://ball-sense.onrender.com/api` |
+| Backend | `CORS_ORIGINS` | `https://ballsense-frontend.onrender.com` |
+
+The frontend URL in `CORS_ORIGINS` must not have a trailing slash. The backend should run from the repository root with `uvicorn backend.main:app --host 0.0.0.0 --port $PORT --workers 1`.
+
+Deploy the updated source and rebuild the frontend after setting `VITE_API_BASE`: Vite embeds this value at build time. On Render, use **Manual Deploy > Clear build cache & deploy** for the frontend if an older build is still being served. Restarting only the backend does not update the static frontend.
+
+Room creation uses `https://ball-sense.onrender.com/api/hand/rooms`, joining uses `https://ball-sense.onrender.com/api/hand/rooms/{code}/join`, and room sockets use `wss://ball-sense.onrender.com/api/hand/rooms/{code}/ws`. Invite links stay on the frontend site. Vite's development proxy (`VITE_API_PROXY_TARGET`) does not run on a deployed static site, and an SPA rewrite is not an API proxy. A successful-looking response from the frontend's `/api/hand/rooms` that contains no room JSON indicates incorrect routing, not an invalid invite code.
 
 Focused multiplayer verification:
 

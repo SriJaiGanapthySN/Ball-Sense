@@ -1,4 +1,7 @@
+import { API_BASE, apiUrl } from "../api.js";
+
 export const ROOM_SESSION_KEY = "ballsense-hand-room-v1";
+const validRoomSession = (session) => /^[A-Z2-9]{6}$/.test(session?.code) && typeof session?.token === "string" && session.token.length >= 32;
 
 export function inviteCode(search) {
   const code = new URLSearchParams(search).get("room")?.trim().toUpperCase() || "";
@@ -8,13 +11,24 @@ export function inviteCode(search) {
 export function readRoomSession(storage) {
   try {
     const session = JSON.parse(storage.getItem(ROOM_SESSION_KEY));
-    return /^[A-Z2-9]{6}$/.test(session?.code) && typeof session?.token === "string" && session.token.length >= 32 ? session : null;
+    return validRoomSession(session) ? session : null;
   } catch { return null; }
 }
 
-export function roomSocketUrl(location, code) {
-  const url = new URL(`/api/hand/rooms/${encodeURIComponent(code)}/ws`, location.href);
-  url.protocol = location.protocol === "https:" ? "wss:" : "ws:";
+export async function readRoomResponse(response) {
+  const contentType = response.headers.get("content-type") || "";
+  if (response.ok && !/[/+]json\b/i.test(contentType)) {
+    throw new Error("Room requests are not reaching the multiplayer API. Set VITE_API_BASE to your backend URL ending in /api, then rebuild and redeploy the frontend.");
+  }
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(typeof data?.detail === "string" ? data.detail : response.status === 422 ? "Check your name and match settings." : "The multiplayer server is unavailable.");
+  if (!validRoomSession(data)) throw new Error("The multiplayer API returned an invalid room. Check VITE_API_BASE and deploy the latest backend.");
+  return { code: data.code, token: data.token };
+}
+
+export function roomSocketUrl(location, code, base = API_BASE) {
+  const url = new URL(apiUrl(`/hand/rooms/${encodeURIComponent(code)}/ws`, base), location.href);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   return url.href;
 }
 

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { inviteCode, mergeRoomState, multiplayerToss, readRoomSession, roomAction, roomInviteUrl, roomProtocolError, roomSocketUrl, secondsLeft, synchronizedElapsed } from "./handMultiplayer.js";
+import { apiUrl } from "../api.js";
+import { inviteCode, mergeRoomState, multiplayerToss, readRoomResponse, readRoomSession, roomAction, roomInviteUrl, roomProtocolError, roomSocketUrl, secondsLeft, synchronizedElapsed } from "./handMultiplayer.js";
 import { handMatchInsights, initialHandContext } from "./cricketGames.js";
 
 test("invites open only valid rooms and use secure same-origin sockets", () => {
@@ -10,6 +11,34 @@ test("invites open only valid rooms and use secure same-origin sockets", () => {
   assert.equal(roomSocketUrl(location, "ABC234"), "wss://cricket.example/api/hand/rooms/ABC234/ws");
   assert.equal(roomInviteUrl(location, "ABC234"), "https://cricket.example/?other=1&room=ABC234");
   assert.equal(roomSocketUrl(new URL("http://localhost:5173/"), "ABC234"), "ws://localhost:5173/api/hand/rooms/ABC234/ws");
+});
+
+test("split deployments use the configured backend for room HTTP and WebSocket requests", () => {
+  const frontend = new URL("https://ballsense-frontend.onrender.com/");
+  const backend = "https://ball-sense.onrender.com/api";
+  assert.equal(apiUrl("/hand/rooms", backend), `${backend}/hand/rooms`);
+  assert.equal(apiUrl("/hand/rooms/ABC234/join", `${backend}/`), `${backend}/hand/rooms/ABC234/join`);
+  assert.equal(apiUrl("/hand/rooms"), "/api/hand/rooms");
+  assert.equal(roomSocketUrl(frontend, "ABC234", `${backend}/`), "wss://ball-sense.onrender.com/api/hand/rooms/ABC234/ws");
+  assert.equal(roomSocketUrl(frontend, "ABC234", "/services/api/"), "wss://ballsense-frontend.onrender.com/services/api/hand/rooms/ABC234/ws");
+  assert.equal(roomSocketUrl(frontend, "ABC234", "http://localhost:8010/api"), "ws://localhost:8010/api/hand/rooms/ABC234/ws");
+  assert.equal(roomInviteUrl(frontend, "ABC234"), "https://ballsense-frontend.onrender.com/?room=ABC234");
+});
+
+test("room responses reject static-site fallbacks with deployment guidance", async () => {
+  await assert.rejects(readRoomResponse(new Response("<!doctype html><html></html>", { headers: { "content-type": "text/html" } })), /VITE_API_BASE.*\/api.*rebuild and redeploy/);
+  const session = { code: "ABC234", token: "test-session".repeat(4) };
+  assert.deepEqual(await readRoomResponse(Response.json({ ...session, extra: "ignored" }, { status: 201 })), session);
+  for (const payload of [null, {}, { ...session, code: "wrong" }, { ...session, token: "short" }, { ...session, token: 123 }]) {
+    await assert.rejects(readRoomResponse(Response.json(payload)), /invalid room/);
+  }
+  await assert.rejects(readRoomResponse(new Response("broken JSON", { headers: { "content-type": "application/json" } })), /invalid room/);
+});
+
+test("room responses preserve backend validation and availability errors", async () => {
+  await assert.rejects(readRoomResponse(Response.json({ detail: "This room already has two players." }, { status: 409 })), /already has two players/);
+  await assert.rejects(readRoomResponse(Response.json({ detail: [] }, { status: 422 })), /Check your name/);
+  await assert.rejects(readRoomResponse(new Response("Service unavailable", { status: 503 })), /server is unavailable/);
 });
 
 test("room session parsing tolerates blocked or corrupted storage", () => {

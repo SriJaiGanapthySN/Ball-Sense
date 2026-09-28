@@ -57,6 +57,42 @@ class HandMultiplayerTests(unittest.TestCase):
         with self.assertRaises(MatchError):
             self.action(room, "computer", "PICK", pick=2)
 
+    def test_shots_and_lengths_control_dismissals_without_changing_hand_scores(self):
+        for batting in ("you", "computer"):
+            for host in range(1, 7):
+                for guest in range(1, 7):
+                    for candidate in ("bowled", "caught", "lbw", "runout"):
+                        for length in ("yorker", "good length", "short"):
+                            with self.subTest(batting=batting, host=host, guest=guest, candidate=candidate, length=length):
+                                room = self.make_room()
+                                room.context["batting"] = batting
+                                room.pending = {"you": host, "computer": guest}
+                                choices = [candidate, length, -1] if host == guest else [length, -1]
+                                with patch("src.hand_multiplayer.secrets.choice", side_effect=choices), patch("src.hand_multiplayer.secrets.randbelow", side_effect=lambda limit: limit - 1):
+                                    room.score(100)
+                                delivery = room.context["lastBall"]
+                                attempted = host if batting == "you" else guest
+                                self.assertEqual(delivery["attemptedRuns"], attempted)
+                                self.assertEqual(delivery["wicket"], host == guest)
+                                self.assertEqual(delivery["runs"], 0 if host == guest else attempted)
+                                self.assertEqual(delivery["batRuns"] + delivery["extras"], delivery["runs"])
+                                self.assertEqual(room.context["scores"][batting]["balls"], 1)
+                                if delivery["wicket"]:
+                                    self.assertFalse(delivery["noBall"])
+                                    self.assertFalse(delivery["overthrow"])
+                                    self.assertFalse(delivery["directHit"])
+                                    if attempted >= 4:
+                                        self.assertNotEqual(delivery["dismissal"], "runout")
+                                        self.assertLess(delivery["fielderIndex"], 9)
+                                    if attempted == 6:
+                                        self.assertIn(delivery["dismissal"], ("bowled", "caught"))
+                                    if length == "short":
+                                        self.assertIn(delivery["dismissal"], ("caught", "runout"))
+                                    if attempted <= 3 and candidate == "runout":
+                                        self.assertEqual(delivery["dismissal"], "runout")
+                                else:
+                                    self.assertIsNone(delivery["dismissal"])
+
     def test_two_innings_chase_and_joint_rematch(self):
         room = self.make_room()
         self.start(room)

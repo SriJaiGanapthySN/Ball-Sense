@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { mergeRoomState, readRoomSession, ROOM_SESSION_KEY, roomAction, roomProtocolError, roomSocketUrl } from "../lib/handMultiplayer.js";
+import { apiUrl } from "../api.js";
+import { mergeRoomState, readRoomResponse, readRoomSession, ROOM_SESSION_KEY, roomAction, roomProtocolError, roomSocketUrl } from "../lib/handMultiplayer.js";
 
 export default function useHandMultiplayer() {
   const [session, setSession] = useState(() => {
@@ -128,13 +129,11 @@ export default function useHandMultiplayer() {
     setBusy(true);
     setError("");
     try {
-      const response = await fetch(path, {
+      const response = await fetch(apiUrl(path), {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload), signal: controller.signal,
       });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : response.status === 422 ? "Check your name and match settings." : "The multiplayer server is unavailable.");
-      if (!data.code || !data.token) throw new Error("The multiplayer server returned an invalid room.");
+      const data = await readRoomResponse(response);
       roomRef.current = null;
       setRoom(null);
       remember(data);
@@ -174,8 +173,8 @@ export default function useHandMultiplayer() {
 
   return {
     room, session, connection, error, busy, pickPending, now, send, leave, clockOffset: clockOffset.current,
-    create: (payload) => enter("/api/hand/rooms", payload),
-    join: (code, name) => enter(`/api/hand/rooms/${encodeURIComponent(code.trim().toUpperCase())}/join`, { name }),
+    create: (payload) => enter("/hand/rooms", payload),
+    join: (code, name) => enter(`/hand/rooms/${encodeURIComponent(code.trim().toUpperCase())}/join`, { name }),
     reconnect: () => { setError(""); setRetry((previous) => previous + 1); },
   };
 }

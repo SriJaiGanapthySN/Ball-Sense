@@ -8,6 +8,7 @@ export const FIELDER_SPEED = 4.5;
 export const CHEER_STAGE_CENTRES = [[-20, -25], [20, -25]];
 export const CEREMONY_ORIGIN = [12, 0, 0];
 export const CHEER_MS = 1800;
+export const RECOVERY_MS = 1800;
 export const HANDSHAKE_MS = 2000;
 export const POST_MATCH_MS = 20000;
 export const VICTORY_MS = 13000;
@@ -18,6 +19,47 @@ const DURATIONS = { bowled: 2600, caught: 3800, lbw: 3200, runout: 4200 };
 const clamp = (value) => Math.max(0, Math.min(1, value));
 const lerp = (start, end, amount) => start.map((value, index) => value + (end[index] - value) * clamp(amount));
 const smooth = (value) => { const progress = clamp(value); return progress * progress * (3 - 2 * progress); };
+
+export function movementFacing(start, end, fallback = 0) {
+  return Math.hypot(end[0] - start[0], end[2] - start[2]) > 0.00001 ? Math.atan2(start[0] - end[0], start[2] - end[2]) : fallback;
+}
+
+function turnFacing(start, end, progress) {
+  return start + Math.atan2(Math.sin(end - start), Math.cos(end - start)) * smooth(progress);
+}
+
+export function recoveryFrame(start, home, facing, homeFacing, elapsedMs) {
+  const progress = clamp(elapsedMs / RECOVERY_MS);
+  const travel = smooth((progress - 0.12) / 0.73);
+  const distance = Math.hypot(home[0] - start[0], home[2] - start[2]);
+  const heading = movementFacing(start, home, facing);
+  const moving = distance > 0.01 && progress > 0.12 && progress < 0.85;
+  return {
+    position: travel === 1 ? [...home] : lerp(start, home, travel),
+    facing: progress < 0.12 ? turnFacing(facing, heading, progress / 0.12) : turnFacing(heading, homeFacing, (progress - 0.85) / 0.15),
+    moving, complete: progress === 1,
+    stride: moving ? Math.sin(distance * travel * 2.9) * Math.sin(clamp((progress - 0.12) / 0.73) * Math.PI) * 0.65 : 0,
+  };
+}
+
+export function bowlingFrame(progress, length = "good length") {
+  const delivery = clamp(progress);
+  const runUp = smooth(delivery / 0.58);
+  const flight = clamp((delivery - 0.58) / 0.42);
+  const windup = smooth((delivery - 0.34) / 0.24);
+  const short = /short|bouncer/.test(length);
+  const full = /full|yorker/.test(length);
+  const bounce = short ? 0.48 : full ? 0.9 : 0.72;
+  const impactHeight = short ? 1.87 : full ? 0.27 : 0.82;
+  const height = flight < bounce ? 0.17 + 2.36 * (1 - (flight / bounce) ** 2) : 0.17 + (impactHeight - 0.17) * Math.sin((flight - bounce) / (1 - bounce) * Math.PI / 2);
+  return {
+    position: [0.8 - smooth((runUp - 0.95) / 0.05) * 0.5 + smooth(flight) * 0.5, 0.05, -18 + runUp * 10.4 + smooth(flight) * 2.1],
+    facing: Math.PI, released: delivery >= 0.58, flight,
+    arm: -Math.PI * windup - Math.PI * smooth(flight),
+    stride: delivery < 0.58 ? Math.sin(runUp * 10.4 * 2.9) * Math.sin(runUp * Math.PI) * 0.8 : Math.sin(flight * Math.PI * 2) * (1 - flight) * 0.4,
+    ball: [0, height, -7.6 + flight * 14.6],
+  };
+}
 
 export function shotPlan(runs, side = 1, deliveryNumber = 1) {
   const radius = ({ 1: 10, 2: 18, 3: 25, 4: 34, 5: 34, 6: 36 })[runs] || 10;
@@ -45,7 +87,7 @@ export function chaseFrame(home, target, elapsedMs) {
   const distance = Math.hypot(deltaX, deltaZ);
   const travelled = Math.min(distance, Math.max(0, elapsedMs - 250) / 1000 * FIELDER_SPEED);
   return { position: travelled >= distance ? [...target] : lerp(home, target, distance ? travelled / distance : 1),
-    facing: Math.atan2(-deltaX, -deltaZ), moving: travelled > 0 && travelled < distance,
+    facing: movementFacing(home, target), moving: travelled > 0 && travelled < distance,
     arrived: travelled >= distance, travelled };
 }
 
@@ -72,7 +114,11 @@ export function returnTimeline(delivery, plan = deliveryShotPlan(delivery)) {
 export function deliveryRunningFrame(delivery, elapsedMs, timeline) {
   if (!delivery.overthrow) return runningFrame(delivery.runs, elapsedMs);
   const timing = timeline || returnTimeline(delivery);
-  if (elapsedMs < timing.extraStart) return runningFrame(1, elapsedMs);
+  if (elapsedMs < timing.extraStart) {
+    const waiting = runningFrame(1, elapsedMs);
+    const turn = smooth((elapsedMs - timing.missAt) / (timing.extraStart - timing.missAt));
+    return { ...waiting, batterFacing: turn * Math.PI, runnerFacing: (1 + turn) * Math.PI };
+  }
   return runningFrame(delivery.runs, RUN_START_MS + RUN_LEG_MS + elapsedMs - timing.extraStart);
 }
 
@@ -145,6 +191,14 @@ export function samplePresentation(random = Math.random) {
   return { dismissal, side, fielderIndex, overthrow: variant < 0.3, directHit: variant >= 0.3 && variant < 0.55 };
 }
 
+export function dismissalForShot(attemptedRuns, candidate, length = "good length") {
+  const dismissal = DISMISSALS.includes(candidate) ? candidate : "bowled";
+  if (attemptedRuns >= 4 && dismissal === "runout") return "caught";
+  if (attemptedRuns === 6 && dismissal === "lbw") return "caught";
+  if (/short|bouncer/.test(length) && ["bowled", "lbw"].includes(dismissal)) return "caught";
+  return dismissal;
+}
+
 export function cheeringTeam(delivery) {
   if (!delivery) return null;
   if (delivery.wicket) return delivery.batting === "you" ? "computer" : "you";
@@ -152,8 +206,8 @@ export function cheeringTeam(delivery) {
 }
 
 export function presentationDuration(delivery) {
-  if (delivery && !delivery.wicket && [1, 2, 3].includes(delivery.runs)) return Math.max(outcomeDuration(delivery), returnTimeline(delivery).caughtAt + (delivery.directHit ? 1400 : 350));
-  return outcomeDuration(delivery) + (cheeringTeam(delivery) ? CHEER_MS : 0);
+  if (delivery && !delivery.wicket && [1, 2, 3].includes(delivery.runs)) return Math.max(outcomeDuration(delivery), returnTimeline(delivery).caughtAt + (delivery.directHit ? 1400 : 350)) + RECOVERY_MS;
+  return outcomeDuration(delivery) + (cheeringTeam(delivery) ? CHEER_MS : 0) + (delivery ? RECOVERY_MS : 0);
 }
 
 export function matchSummary(context) {
@@ -195,13 +249,16 @@ export function runningFrame(runs, elapsedMs) {
   const distance = Math.max(0, Math.min(count, (elapsedMs - RUN_START_MS) / RUN_LEG_MS));
   const leg = Math.min(Math.floor(distance), Math.max(0, count - 1));
   const fraction = count ? distance - leg : 0;
-  const crossing = leg % 2 ? 1 - smooth(fraction) : smooth(fraction);
-  const moving = elapsedMs > RUN_START_MS && distance < count;
+  const travel = clamp(fraction / 0.82);
+  const crossing = leg % 2 ? 1 - smooth(travel) : smooth(travel);
+  const moving = elapsedMs > RUN_START_MS && distance < count && travel > 0 && travel < 1;
+  const turn = leg < count - 1 ? smooth((fraction - 0.82) / 0.18) : 0;
+  const facing = (leg % 2 ? 1 - turn : turn) * Math.PI;
   return {
     batterZ: 7 - crossing * 14, runnerZ: -7 + crossing * 14,
-    batterFacing: leg % 2 ? Math.PI : 0, runnerFacing: leg % 2 ? 0 : Math.PI,
-    completed: Math.floor(distance), moving,
-    stride: moving ? Math.sin(fraction * Math.PI * 10) * Math.sin(Math.PI * fraction) : 0,
+    batterFacing: facing, runnerFacing: facing + Math.PI,
+    completed: count ? leg + (travel === 1 ? 1 : 0) : 0, moving,
+    stride: moving ? Math.sin(travel * Math.PI * 10) * Math.sin(Math.PI * travel) : 0,
   };
 }
 
@@ -215,7 +272,7 @@ export function dismissalFrame(kind, progress, side = 1, fielderIndex) {
   const [fieldX, , fieldZ] = destination;
   const frame = {
     ball: [0, 0.65, 7], batter: [0.65, 0.05, 7], runner: [-1.3, 0.05, -7],
-    fielder: home, ballVisible: true,
+    fielder: home, fielderFacing: movementFacing(home, destination), ballVisible: true,
     bails: 0, brokenEnd: null, appeal: 0, signal: 0, celebrate: 0,
     catchReach: 0, throwArm: 0, dive: 0, run: 0, swing: 0,
     camera: [5, 3.8, 16], look: [0, 1.1, 7], shot: "BOWLED / STUMPS",
@@ -225,8 +282,10 @@ export function dismissalFrame(kind, progress, side = 1, fielderIndex) {
     const flight = clamp(phase / 0.6);
     const move = smooth(phase / 0.5);
     frame.fielder = lerp(home, destination, move);
+    const catchingFacing = movementFacing(destination, [0, 0.05, 7]);
+    frame.fielderFacing = turnFacing(frame.fielderFacing, catchingFacing, (phase - 0.5) / 0.1);
     frame.catchReach = smooth((phase - 0.25) / 0.25) * (1 - smooth((phase - 0.75) / 0.25) * 0.7);
-    frame.ball = lerp([0, 0.75, 7], [fieldX, 2.15, fieldZ - 0.4], flight);
+    frame.ball = lerp([0, 0.75, 7], [fieldX - Math.sin(catchingFacing) * 0.4, 2.15, fieldZ - Math.cos(catchingFacing) * 0.4], flight);
     frame.ball[1] += Math.sin(flight * Math.PI) * (isKeeper ? 0.35 : 6);
     frame.swing = Math.sin(clamp(phase / 0.25) * Math.PI);
     frame.celebrate = smooth((phase - 0.67) / 0.2);
@@ -246,6 +305,7 @@ export function dismissalFrame(kind, progress, side = 1, fielderIndex) {
   } else if (kind === "runout") {
     const pickup = [fieldX, 0.22, fieldZ];
     frame.fielder = lerp(home, destination, smooth(phase / 0.3));
+    frame.fielderFacing = turnFacing(frame.fielderFacing, movementFacing(destination, [0, 0.05, -8.4]), (phase - 0.3) / 0.12);
     frame.run = clamp((phase - 0.06) / 0.76);
     frame.batter = lerp([0.65, 0.05, 7], [0.65, 0.05, -7.6], frame.run);
     frame.runner = lerp([-1.3, 0.05, -7], [-1.3, 0.05, 7], frame.run);
