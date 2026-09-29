@@ -122,7 +122,7 @@ export default function BookCricketTab({ active = true }) {
     setCameraVersion((version) => version + 1);
   }
 
-  let statusTitle = setup ? "Match ready" : paused ? "Match paused" : flipping ? "Turning the pages" : `${names[context.batting]} batting`;
+  let statusTitle = setup ? "Match ready" : paused ? "Match paused" : flipping ? "Opening the book" : `${names[context.batting]} batting`;
   let statusDetail = setup ? `${overs} over${overs === 1 ? "" : "s"} / ${wicketLimit} wicket${wicketLimit === 1 ? "" : "s"}` : runsNeeded == null ? `${ballsLeft} balls remaining` : `${runsNeeded} needed from ${ballsLeft} balls`;
   if (phase === "inningsBreak") { statusTitle = "Innings complete"; statusDetail = `${names[nextBatter]} need ${context.target} to win`; }
   if (finished) { statusTitle = resultTitle; statusDetail = context.result.winner === "tie" ? "Scores level" : `By ${context.result.margin}`; }

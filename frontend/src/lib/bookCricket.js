@@ -7,7 +7,21 @@ export const BOOKS = [
 ];
 export const BOOK_OVERS = [1, 2, 5, 10];
 export const BOOK_WICKETS = [1, 3, 5, 10];
-export const BOOK_FLIP_MS = 1300;
+export const BOOK_FLIP_MS = 2200;
+
+export function bookFlipFrame(elapsed) {
+  const time = Math.max(0, Math.min(BOOK_FLIP_MS, elapsed));
+  const stage = time < 700 ? "closing" : time < 1000 ? "closed" : time < 2000 ? "opening" : "revealing";
+  const progress = stage === "closing" ? time / 700 : stage === "opening" ? (time - 1000) / 1000 : 0;
+  const eased = progress * progress * (3 - 2 * progress);
+  return {
+    stage,
+    openness: stage === "closing" ? 1 - eased : stage === "closed" ? 0 : stage === "opening" ? eased : 1,
+    newPage: time >= 850,
+    pageTurn: stage === "opening" ? progress : null,
+    complete: time === BOOK_FLIP_MS,
+  };
+}
 
 export function pageOutcome(page) {
   if (!Number.isSafeInteger(page) || page < 1) throw new RangeError("Page must be a positive whole number.");

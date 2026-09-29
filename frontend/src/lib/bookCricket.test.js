@@ -1,7 +1,28 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createActor } from "xstate";
-import { BOOKS, bookCricketMachine, bookSpread, pageOutcome, sampleBookPage } from "./bookCricket.js";
+import { BOOKS, BOOK_FLIP_MS, bookCricketMachine, bookFlipFrame, bookSpread, pageOutcome, sampleBookPage } from "./bookCricket.js";
+
+test("every delivery closes completely before reopening and revealing the new page", () => {
+  assert.equal(bookFlipFrame(0).openness, 1);
+  assert.ok(bookFlipFrame(350).openness > 0 && bookFlipFrame(350).openness < 1);
+  for (const time of [700, 800, 850, 999]) {
+    assert.equal(bookFlipFrame(time).stage, "closed");
+    assert.equal(bookFlipFrame(time).openness, 0);
+    assert.equal(bookFlipFrame(time).complete, false);
+    assert.equal(bookFlipFrame(time).pageTurn, null);
+  }
+  assert.equal(bookFlipFrame(849).newPage, false);
+  assert.equal(bookFlipFrame(850).newPage, true);
+  assert.equal(bookFlipFrame(1000).openness, 0);
+  assert.equal(bookFlipFrame(1500).openness, .5);
+  assert.equal(bookFlipFrame(2000).openness, 1);
+  assert.equal(bookFlipFrame(BOOK_FLIP_MS - 1).complete, false);
+  assert.equal(bookFlipFrame(BOOK_FLIP_MS).complete, true);
+  assert.deepEqual(bookFlipFrame(-50), bookFlipFrame(0));
+  assert.deepEqual(bookFlipFrame(BOOK_FLIP_MS + 50), bookFlipFrame(BOOK_FLIP_MS));
+  for (const boundary of [700, 1000, 2000]) assert.ok(Math.abs(bookFlipFrame(boundary - .01).openness - bookFlipFrame(boundary).openness) < .00001);
+});
 
 function startMatch(options = {}) {
   const actor = createActor(bookCricketMachine).start();

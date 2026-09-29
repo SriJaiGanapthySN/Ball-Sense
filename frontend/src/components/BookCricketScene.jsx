@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
-import { BOOK_FLIP_MS, bookSpread } from "../lib/bookCricket.js";
+import { BOOK_FLIP_MS, bookFlipFrame, bookSpread } from "../lib/bookCricket.js";
 
 const PAGE_WIDTH = 2.24;
 const PAGE_HEIGHT = 3.12;
@@ -310,6 +310,19 @@ function buildBook(book, renderer) {
   const edgeMaterial = new THREE.MeshStandardMaterial({ map: edgeMap, roughness: .95 });
   const thickness = book.pages / 1000;
   const boardHeight = book.binding === "paperback" ? .025 : .065;
+  const hingeHeight = .102 + thickness / 2;
+  const hinge = new THREE.Group();
+  const movingHalf = new THREE.Group();
+  hinge.position.y = hingeHeight;
+  movingHalf.position.y = -hingeHeight;
+  hinge.add(movingHalf);
+  open.add(hinge);
+  const undersideMap = coverMap.clone();
+  undersideMap.center.set(.5, .5);
+  undersideMap.rotation = Math.PI;
+  textures.add(undersideMap);
+  const undersideMaterial = coverMaterial.clone();
+  undersideMaterial.map = undersideMap;
   function box(parent, width, height, depth, material, position, rounded = false) {
     const mesh = new THREE.Mesh(rounded ? new RoundedBoxGeometry(width, height, depth, 2, Math.min(.04, height / 3)) : new THREE.BoxGeometry(width, height, depth), material);
     mesh.position.set(...position);
@@ -320,12 +333,14 @@ function buildBook(book, renderer) {
   }
   const sides = [-1, 1].map((direction) => {
     const centre = direction * (PAGE_WIDTH / 2 + .06);
-    box(open, PAGE_WIDTH + .12, boardHeight, PAGE_HEIGHT + .15, boardMaterial, [centre, .06, 0], true);
+    const parent = direction < 0 ? movingHalf : open;
+    const boardFaces = direction < 0 ? [boardMaterial, boardMaterial, boardMaterial, undersideMaterial, boardMaterial, boardMaterial] : boardMaterial;
+    box(parent, PAGE_WIDTH + .12, boardHeight, PAGE_HEIGHT + .15, boardFaces, [centre, .06, 0], true);
     const sideMap = edgeMap.clone();
     textures.add(sideMap);
     const sideMaterial = edgeMaterial.clone();
     sideMaterial.map = sideMap;
-    const stack = box(open, PAGE_WIDTH - .035, 1, PAGE_HEIGHT - .035, [sideMaterial, sideMaterial, paperMaterial, paperMaterial, sideMaterial, sideMaterial], [centre, .1, 0]);
+    const stack = box(parent, PAGE_WIDTH - .035, 1, PAGE_HEIGHT - .035, [sideMaterial, sideMaterial, paperMaterial, paperMaterial, sideMaterial, sideMaterial], [centre, .1, 0]);
     const geometry = new THREE.PlaneGeometry(PAGE_WIDTH, PAGE_HEIGHT, 28, 12);
     geometry.rotateX(-Math.PI / 2);
     geometry.translate(centre, 0, 0);
@@ -338,7 +353,7 @@ function buildBook(book, renderer) {
     const material = new THREE.MeshStandardMaterial({ roughness: .94, side: THREE.DoubleSide });
     const page = new THREE.Mesh(geometry, material);
     page.receiveShadow = true;
-    open.add(page);
+    parent.add(page);
     return { direction, stack, page, sideMap, material };
   });
   box(closed, PAGE_WIDTH + .12, boardHeight, PAGE_HEIGHT + .15, boardMaterial, [0, .06, 0], true);
@@ -378,6 +393,12 @@ function buildBook(book, renderer) {
   let currentKey = "";
   return {
     group, open, closed, leaves, textures,
+    setOpenness(openness) {
+      hinge.rotation.z = -Math.PI * (1 - openness);
+      const offset = -(PAGE_WIDTH / 2 + .06) * (1 - openness);
+      group.position.set(offset * Math.cos(group.rotation.y), 0, -offset * Math.sin(group.rotation.y));
+      sides.forEach((side) => { side.page.scale.y = openness; });
+    },
     setPage(page, selected) {
       const key = `${page}:${selected}`;
       if (key === currentKey) return;
@@ -403,13 +424,13 @@ function buildBook(book, renderer) {
         side.sideMap.repeat.y = Math.max(.02, share);
       }
     },
-    turn(progress, forward) {
+    turn(progress, openness) {
       for (let index = 0; index < leaves.length; index++) {
         const local = clamp((progress - .065 * index) / .64);
         const { leaf, geometry } = leaves[index];
         leaf.visible = local > 0 && local < 1;
         if (!leaf.visible) continue;
-        const angle = (forward ? ease(local) : 1 - ease(local)) * Math.PI;
+        const angle = Math.min(ease(local), openness) * Math.PI;
         const positions = geometry.attributes.position;
         for (let vertex = 0; vertex < positions.count; vertex++) {
           const across = (vertex % 29) / 28;
@@ -508,17 +529,24 @@ export default function BookCricketScene({ book, page, pendingPage, flipId, flip
       if (disposed || lost || !settings.active || document.hidden) { lastTime = null; return; }
       const delta = lastTime == null || settings.paused ? 0 : time - lastTime;
       lastTime = time;
-      model.open.visible = !settings.cover;
-      model.closed.visible = settings.cover;
+      const showCover = !settings.flipping && settings.cover || settings.flipping && !settings.motion;
+      model.open.visible = !showCover;
+      model.closed.visible = showCover;
       if (settings.flipping && settings.motion) {
         if (turn?.id !== settings.flipId) turn = { id: settings.flipId, from: settings.page || 1, to: settings.pendingPage, elapsed: 0, done: false };
         turn.elapsed += delta;
         const progress = clamp(turn.elapsed / BOOK_FLIP_MS);
-        model.setPage(progress < .52 ? turn.from : turn.to, progress >= .52 || settings.page != null);
-        model.setDepth(THREE.MathUtils.lerp(turn.from / book.pages, turn.to / book.pages, ease(progress)));
-        model.turn(progress, turn.to >= turn.from);
+        const pose = bookFlipFrame(turn.elapsed);
+        const shown = pose.newPage ? turn.to : turn.from;
+        model.setPage(shown, pose.newPage || settings.page != null);
+        model.setDepth(shown / book.pages);
+        model.setOpenness(pose.openness);
+        if (pose.pageTurn != null) model.turn(pose.pageTurn, pose.openness);
+        else model.leaves.forEach(({ leaf }) => { leaf.visible = false; });
         host.dataset.progress = progress.toFixed(3);
-        if (progress >= 1 && !turn.done) {
+        host.dataset.bookStage = pose.stage;
+        host.dataset.openness = pose.openness.toFixed(3);
+        if (pose.complete && !turn.done) {
           turn.done = true;
           settings.onReveal(turn.id);
         }
@@ -526,9 +554,12 @@ export default function BookCricketScene({ book, page, pendingPage, flipId, flip
         const shown = settings.flipping ? settings.pendingPage : settings.page || 1;
         model.setPage(shown, settings.flipping || settings.page != null);
         model.setDepth(shown / book.pages);
+        model.setOpenness(1);
         model.leaves.forEach(({ leaf }) => { leaf.visible = false; });
         turn = null;
         host.dataset.progress = "1";
+        host.dataset.bookStage = showCover ? "closed" : "open";
+        host.dataset.openness = showCover ? "0" : "1";
       }
       controls.update();
       renderer.render(scene, camera);
@@ -582,9 +613,9 @@ export default function BookCricketScene({ book, page, pendingPage, flipId, flip
   const visiblePage = flipping && (!motion || failed) ? pendingPage : page;
   const spread = bookSpread(visiblePage || 1, book.pages);
   return <>
-    <div ref={hostRef} className="book-canvas" role="img" aria-label={`${book.title}, ${cover ? "front cover" : `open at page ${visiblePage || 1}`}`} data-renderer={failed ? "fallback" : "three"} />
+    <div ref={hostRef} className="book-canvas" role="img" aria-label={`${book.title}, ${flipping ? "opening a new page" : cover ? "front cover" : `open at page ${visiblePage || 1}`}`} data-renderer={failed ? "fallback" : "three"} />
     {failed && <div className="book-fallback">
-      {cover ? <BookCover book={book} /> : <div className="book-fallback-spread">{[spread.left, spread.right].map((number, index) => <div key={index} className={number === visiblePage ? "selected" : ""}><span>{book.title}</span><div className="book-fallback-lines" /><strong>{number}</strong></div>)}</div>}
+      {cover || flipping ? <BookCover book={book} /> : <div className="book-fallback-spread">{[spread.left, spread.right].map((number, index) => <div key={index} className={number === visiblePage ? "selected" : ""}><span>{book.title}</span><div className="book-fallback-lines" /><strong>{number}</strong></div>)}</div>}
       <span className="book-fallback-notice" role="status">3D is unavailable on this device.</span>
     </div>}
   </>;
