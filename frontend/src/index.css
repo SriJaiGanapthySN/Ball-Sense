@@ -1781,9 +1781,10 @@ label {
 .overview-empty span { font-size: 11px; color: var(--muted); }
 .overview-empty .text-button { margin-left: auto; flex-shrink: 0; }
 .quiet-label { color: var(--muted); font-size: 9px; }
-.pavilion-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.pavilion-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .pavilion-item { display: flex; align-items: center; justify-content: space-between; gap: 18px; min-height: 178px; border-radius: 7px; padding: 26px; text-align: left; cursor: pointer; border: 1px solid #395445; color: #c3e2d0; background: repeating-linear-gradient(120deg, transparent, transparent 30px, rgba(155, 203, 172, .025) 30px, rgba(155, 203, 172, .025) 31px), #20342a; }
 .pavilion-item.whatif { background-color: #302e28; border-color: #514b3e; color: #decdac; }
+.pavilion-item.book { background-color: #2e2930; border-color: #5b454f; color: #e4c1c9; }
 .pavilion-item:hover { border-color: currentColor; }
 .pavilion-item .eyebrow { color: inherit; font-size: 9px; opacity: .75; }
 .pavilion-item h3 { font-size: 36px; margin: 10px 0 16px; font-weight: 500; color: var(--text); }
@@ -1804,6 +1805,7 @@ label {
 @media (min-width: 1700px) { .matchday-banner { min-height: 320px; } }
 @media (max-width: 1200px) {
   .fixtures-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pavilion-grid { grid-template-columns: minmax(0, 1fr); }
   .overview-fixtures .fixture-card:last-child { display: none; }
   .workspace-shortcuts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .workspace-shortcuts button:nth-child(2) { border-right: 0; }

@@ -11,6 +11,7 @@ import { inviteCode } from "./lib/handMultiplayer.js";
 const PredictorTab = lazy(() => import("./components/PredictorTab.jsx"));
 const PlayerComparisonTab = lazy(() => import("./components/PlayerComparisonTab.jsx"));
 const HandCricketTab = lazy(() => import("./components/HandCricketTab.jsx"));
+const BookCricketTab = lazy(() => import("./components/BookCricketTab.jsx"));
 const WhatIfTab = lazy(() => import("./components/WhatIfTab.jsx"));
 
 const PAGES = {
@@ -21,6 +22,7 @@ const PAGES = {
   compare: { title: "Player Comparison", category: "Intelligence" },
   dashboard: { title: "Analytics", category: "Intelligence" },
   handcricket: { title: "Hand Cricket", category: "The Pavilion" },
+  bookcricket: { title: "Book Cricket", category: "The Pavilion" },
   whatif: { title: "What If Lab", category: "The Pavilion" },
 };
 
@@ -45,7 +47,7 @@ export default function App() {
   function setTab(next) {
     if (!PAGES[next]) return;
     updateTab(next);
-    if (next === "handcricket" || next === "whatif") {
+    if (next === "handcricket" || next === "bookcricket" || next === "whatif") {
       setOpenedGames((previous) => previous.includes(next) ? previous : [...previous, next]);
     }
     window.scrollTo({ top: 0, left: 0 });
@@ -78,7 +80,7 @@ export default function App() {
           <Suspense fallback={<div className="content"><div className="skeleton-block" role="status" aria-label="Loading section" /></div>}>
           {tab === "home" ? (
             <LandingPage status={status} onNavigate={setTab} live={live} />
-          ) : tab !== "handcricket" && tab !== "whatif" ? (
+          ) : tab !== "handcricket" && tab !== "bookcricket" && tab !== "whatif" ? (
             <div className="content" key={tab}>
               {tab === "chat" && <ComingSoon icon={MessageCircle} title="Cricket Assistant" description="The analyst's desk is being prepared for its next innings." />}
               {tab === "predict" && <PredictorTab />}
@@ -88,6 +90,7 @@ export default function App() {
             </div>
           ) : null}
           <div key="handcricket" className="content" hidden={tab !== "handcricket"}>{openedGames.includes("handcricket") && <HandCricketTab active={tab === "handcricket"} />}</div>
+          <div key="bookcricket" className="content" hidden={tab !== "bookcricket"}>{openedGames.includes("bookcricket") && <BookCricketTab active={tab === "bookcricket"} />}</div>
           <div key="whatif" className="content" hidden={tab !== "whatif"}>{openedGames.includes("whatif") && <WhatIfTab importedScenario={importedScenario} active={tab === "whatif"} />}</div>
           </Suspense>
         </main>

@@ -1,0 +1,156 @@
+.book-game { min-width: 0; scroll-margin-top: 24px; }
+.book-game button, .book-game input, .book-game select { touch-action: manipulation; }
+.book-game button:disabled { cursor: not-allowed; }
+.book-topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+.book-topbar .segmented-control button { min-height: 38px; padding-inline: 16px; }
+.book-topbar .segmented-control button:disabled:not(.selected) { opacity: .5; }
+.book-top-actions, .book-view-tools { display: flex; align-items: center; gap: 6px; }
+.book-layout { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 30px; align-items: start; padding-top: 22px; }
+.book-main, .book-sidebar, .book-collection, .book-match-settings { min-width: 0; }
+.book-scoreboard { display: grid; grid-template-columns: minmax(0, 1fr) 88px minmax(0, 1fr); gap: 12px; padding-bottom: 20px; border-bottom: 1px solid var(--border); align-items: center; }
+.book-team-score { min-width: 0; grid-row: 1; }
+.book-team-score:nth-child(2) { text-align: right; }
+.book-team-score > span { display: flex; align-items: center; gap: 6px; min-height: 20px; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.book-team-score > span svg { flex-shrink: 0; color: var(--accent); }
+.book-team-score:nth-child(2) > span { justify-content: flex-end; }
+.book-team-score.batting > span { color: var(--text); }
+.book-team-score > strong { display: block; font-family: var(--font-display); font-size: 48px; font-weight: 500; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.book-team-score strong small { font-size: 32px; color: var(--muted); }
+.book-team-score em { display: block; margin-top: 5px; font-style: normal; font-size: 11px; }
+.book-team-score em span { color: var(--muted); }
+.book-innings-marker { grid-column: 2; grid-row: 1; display: flex; flex-direction: column; align-items: center; gap: 7px; text-align: center; color: var(--muted); }
+.book-innings-marker > span, .book-innings-marker small { font-size: 9px; line-height: 1.4; }
+.book-innings-marker > strong { font-family: var(--font-display); font-size: 30px; font-weight: 500; color: var(--accent-2); line-height: 1; }
+.book-stage-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0; }
+.book-stage-toolbar > div:first-child { display: grid; gap: 3px; min-width: 0; }
+.book-stage-toolbar strong { font-size: 12px; font-weight: 500; overflow-wrap: anywhere; }
+.book-stage-toolbar span { font-size: 10px; color: var(--muted); }
+.book-view-tools { flex-shrink: 0; }
+.book-view-tools .segmented-control { flex-wrap: nowrap; }
+.book-view-tools .segmented-control button { width: 34px; height: 32px; min-height: 32px; padding: 0; }
+.book-view-tools .square-button { width: 38px; height: 38px; }
+.book-view-tools .square-button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.book-stage { position: relative; width: 100%; aspect-ratio: 1.6; min-height: 320px; max-height: 480px; overflow: hidden; background: #1b201e; }
+.book-canvas { position: absolute; inset: 0; cursor: grab; }
+.book-canvas:active { cursor: grabbing; }
+.book-canvas canvas { display: block; width: 100%; height: 100%; }
+.book-reveal { display: grid; grid-template-columns: minmax(0, 1fr) 22px minmax(0, 1fr) 22px minmax(0, 1fr); align-items: center; gap: 8px; padding: 20px 12px; border-bottom: 1px solid var(--border); text-align: center; }
+.book-reveal > svg { color: #65756c; }
+.book-reveal > div { min-width: 0; }
+.book-reveal span { display: block; font-size: 9px; color: var(--muted); }
+.book-reveal strong { display: block; font-size: 35px; line-height: 1.15; margin-top: 5px; font-family: var(--font-display); font-weight: 500; font-variant-numeric: tabular-nums; }
+.book-reveal .book-outcome strong { color: var(--accent); }
+.book-reveal.is-wicket .book-outcome strong, .book-reveal.is-wicket .book-outcome span { color: var(--danger); }
+.book-outcome { animation: book-result-in 220ms ease-out; }
+.book-actionbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 94px; padding: 19px 0; }
+.book-actionbar > div { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.book-actionbar > div > svg { color: var(--accent-2); flex-shrink: 0; }
+.book-actionbar strong { display: block; font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+.book-actionbar span { display: block; font-size: 11px; line-height: 1.5; color: var(--muted); margin-top: 5px; overflow-wrap: anywhere; }
+.book-actionbar.finished strong { color: var(--accent-2); }
+.book-game .book-primary { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-width: 160px; min-height: 46px; flex-shrink: 0; }
+.book-game .book-primary:disabled { background: var(--panel-2); color: var(--muted); border: 1px solid var(--border); opacity: 1; }
+.book-sidebar { border-left: 1px solid var(--border); padding-left: 26px; }
+.book-section-heading { margin-bottom: 15px; }
+.book-section-heading .eyebrow { color: var(--accent-2); font-size: 9px; }
+.book-section-heading h2 { font-size: 24px; font-weight: 500; margin: 5px 0 0; }
+.book-choices { display: grid; gap: 9px; }
+.book-choice { position: relative; display: grid; grid-template-columns: 46px minmax(0, 1fr) 17px; align-items: center; gap: 12px; width: 100%; padding: 12px 10px; border: 1px solid var(--border); border-radius: 5px; background: transparent; color: var(--text); text-align: left; cursor: pointer; }
+.book-choice:hover:not(:disabled) { background: var(--panel-2); border-color: var(--muted); }
+.book-choice.selected { border-color: #6a9980; background: #202d25; }
+.book-choice:disabled { cursor: default; }
+.book-choice:disabled:not(.selected) { opacity: .55; }
+.book-cover-art { display: block; width: 46px; height: auto; aspect-ratio: 5 / 7; box-shadow: 3px 3px 0 #b0b3a4, 5px 5px 9px #0005; transform: rotate(-4deg); }
+.book-choice > span:nth-child(2) { display: grid; gap: 5px; min-width: 0; }
+.book-choice strong { font-family: var(--font-display); font-size: 20px; font-weight: 500; line-height: 1.1; overflow-wrap: anywhere; }
+.book-choice small { font-size: 9px; color: var(--muted); line-height: 1.4; }
+.book-choice em { font-style: normal; font-size: 9px; color: var(--accent-2); }
+.book-selection-dot { width: 17px; height: 17px; border: 1px solid var(--border); border-radius: 50%; display: grid; place-items: center; }
+.book-choice.selected .book-selection-dot { background: var(--accent); border-color: var(--accent); color: #12251c; }
+.book-match-settings { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border); }
+.book-match-settings fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.book-match-settings legend { padding: 0; margin-bottom: 14px; font-family: var(--font-display); font-size: 22px; font-weight: 500; }
+.book-match-settings label:not(.book-motion-toggle) { display: grid; gap: 7px; min-width: 0; margin: 0 0 13px; font-size: 11px; color: var(--muted); }
+.book-settings-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.book-game .book-match-settings select, .book-game .book-match-settings input:not([type="checkbox"]) { width: 100%; min-height: 41px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 5px; background: var(--panel); color: var(--text); font-size: 11px; }
+.book-match-settings fieldset:disabled select, .book-match-settings fieldset:disabled input { opacity: .65; }
+.book-game .book-motion-toggle { display: flex; align-items: center; gap: 9px; font-size: 11px; color: var(--muted); margin-top: 8px; }
+.book-motion-toggle input { width: 15px; height: 15px; accent-color: var(--accent); }
+.book-game .book-sidebar-start { display: none; }
+.book-scorebook { margin-top: 27px; border-top: 1px solid var(--border); padding-top: 22px; }
+.book-scorebook > header { display: flex; justify-content: space-between; align-items: center; gap: 14px; }
+.book-scorebook h2 { margin: 0; font-size: 26px; font-weight: 500; }
+.book-ledger-summary { display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: baseline; margin: 19px 0; font-size: 11px; }
+.book-ledger-summary strong { font-weight: 500; color: var(--text); overflow-wrap: anywhere; }
+.book-ledger-summary > span { color: var(--muted); }
+.book-ledger-summary > span:first-of-type { font-weight: 600; color: var(--text); }
+.book-ledger-summary small { font-weight: 400; color: var(--muted); }
+.book-ledger-scroll { overflow: auto; max-height: 346px; }
+.book-scorebook table { width: 100%; border-collapse: collapse; font-size: 11px; font-variant-numeric: tabular-nums; text-align: right; }
+.book-scorebook th { position: sticky; top: 0; padding: 12px 14px; background: var(--panel-2); color: var(--muted); font-weight: 500; z-index: 1; }
+.book-scorebook td { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.book-scorebook th:first-child, .book-scorebook td:first-child { text-align: left; }
+.book-wicket-row { background: #3e26262e; }
+.book-run-mark { display: inline-grid; place-items: center; width: 25px; height: 25px; border-radius: 50%; background: var(--panel-2); }
+.book-run-mark.boundary { color: var(--accent); }
+.book-run-mark.wicket { color: #ffc0b7; background: #633b36; }
+.book-empty-innings { font-size: 12px; color: var(--muted); padding: 15px 0; }
+.book-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+.book-fallback { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; background: #1b201e; padding: 30px 20px; }
+.book-fallback > .book-cover-art { width: auto; height: 75%; max-width: 65%; }
+.book-fallback-spread { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: min(88%, 450px); aspect-ratio: 1.5; box-shadow: 2px 5px 0 #cccabd, 4px 9px 0 #727a72, 0 20px 30px #0005; }
+.book-fallback-spread > div { display: flex; flex-direction: column; justify-content: space-between; text-align: center; padding: 18px; background: #f1eee3; color: #2a3e34; border: 2px solid transparent; }
+.book-fallback-spread > div:first-child { border-right-color: #bbbbaa; }
+.book-fallback-spread > div.selected { border-color: #49705b; }
+.book-fallback-spread span { font: 12px Georgia, serif; }
+.book-fallback-spread strong { font: bold 27px Georgia, serif; }
+.book-fallback-lines { height: 50%; background: repeating-linear-gradient(transparent 0 8px, #79837766 8px 9px, transparent 9px 13px); }
+.book-fallback-notice { color: var(--muted); font-size: 11px; }
+@keyframes book-result-in { from { opacity: .4; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 1200px) {
+  .book-layout { grid-template-columns: minmax(0, 1fr) 230px; gap: 22px; }
+  .book-sidebar { padding-left: 20px; }
+  .book-choice { grid-template-columns: 37px minmax(0, 1fr) 15px; gap: 10px; padding: 10px 8px; }
+  .book-choice .book-cover-art { width: 37px; }
+  .book-choice strong { font-size: 18px; }
+}
+@media (max-width: 1000px) {
+  .book-layout { grid-template-columns: minmax(0, 1fr); gap: 25px; }
+  .book-sidebar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; border-left: 0; border-top: 1px solid var(--border); padding: 24px 0 0; }
+  .book-match-settings { margin: 0; padding: 0; border-top: 0; }
+  .book-choice { grid-template-columns: 42px minmax(0, 1fr) 17px; padding: 12px; }
+  .book-choice .book-cover-art { width: 42px; }
+  .book-choice strong { font-size: 21px; }
+  .book-game .book-sidebar-start { display: inline-flex; align-items: center; justify-content: center; gap: 9px; width: 100%; margin-top: 20px; }
+}
+@media (max-width: 760px) { .book-game { scroll-margin-top: 133px; } }
+@media (max-width: 520px) {
+  .book-topbar { padding-bottom: 15px; }
+  .book-topbar .segmented-control button { min-height: 36px; padding-inline: 11px; }
+  .book-layout { padding-top: 18px; }
+  .book-scoreboard { grid-template-columns: minmax(0, 1fr) 66px minmax(0, 1fr); gap: 8px; padding-bottom: 16px; }
+  .book-team-score > strong { font-size: 42px; }
+  .book-team-score strong small { font-size: 28px; }
+  .book-stage { aspect-ratio: 1.2; min-height: 250px; }
+  .book-stage-toolbar { gap: 8px; }
+  .book-stage-toolbar strong { font-size: 11px; }
+  .book-view-tools { gap: 4px; }
+  .book-view-tools .square-button { width: 34px; height: 36px; }
+  .book-view-tools .segmented-control button { width: 30px; }
+  .book-reveal { padding: 18px 5px; gap: 4px; }
+  .book-reveal strong { font-size: 33px; }
+  .book-actionbar { align-items: stretch; flex-direction: column; gap: 14px; }
+  .book-game .book-primary { width: 100%; }
+  .book-actionbar > div { min-height: 41px; }
+  .book-sidebar { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .book-choices { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .book-choice { grid-template-columns: minmax(0, 1fr); align-content: start; text-align: center; justify-items: center; gap: 14px; padding: 16px 7px 12px; }
+  .book-choice .book-cover-art { width: 46px; }
+  .book-choice > span:nth-child(2) { gap: 6px; }
+  .book-choice strong { font-size: 19px; min-height: 43px; }
+  .book-choice small { font-size: 9px; min-height: 26px; }
+  .book-choice .book-selection-dot { position: absolute; right: 4px; top: 4px; width: 14px; height: 14px; }
+  .book-scorebook th, .book-scorebook td { padding: 10px 8px; }
+  .book-scorebook h2 { font-size: 24px; }
+  .book-scorebook .segmented-control button { font-size: 10px; padding-inline: 9px; }
+}

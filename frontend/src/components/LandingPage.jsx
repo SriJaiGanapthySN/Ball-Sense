@@ -1,4 +1,4 @@
-import { ArrowRight, ArrowUpRight, BarChart3, FlaskConical, Hand, LayoutDashboard, MessageCircle, Radio } from "lucide-react";
+import { ArrowRight, ArrowUpRight, BarChart3, BookOpen, FlaskConical, Hand, LayoutDashboard, MessageCircle, Radio } from "lucide-react";
 import { FeedStatus, MatchCard } from "./LiveTab.jsx";
 import { matchState, orderMatches } from "../lib/liveMatches.js";
 import Wordmark from "./Wordmark.jsx";
@@ -41,10 +41,11 @@ export default function LandingPage({ status, onNavigate, live }) {
         {matches.length ? <div className="fixtures-grid overview-fixtures">{matches.slice(0, 3).map((match, index) => <MatchCard key={match.id || index} match={match} compact />)}</div> : live.loading ? <div className="fixtures-grid overview-fixtures">{[0, 1, 2].map((value) => <div className="skeleton-block" key={value} />)}</div> : <div className="overview-empty"><Radio size={24} /><div><strong>{live.feed ? "No current matches" : "The live feed is unavailable"}</strong><span>{live.feed ? "No fixtures returned by CricAPI." : "Games and historical analytics are still available."}</span></div><button className="text-button" onClick={() => onNavigate("live")}>Match centre<ArrowRight size={16} /></button></div>}
       </section>
       <section className="overview-section">
-        <div className="section-toolbar"><div className="section-heading"><span className="eyebrow">THE PAVILION</span><h2>A different kind of innings</h2></div><span className="quiet-label">2 GAMES / NO API REQUIRED</span></div>
+        <div className="section-toolbar"><div className="section-heading"><span className="eyebrow">THE PAVILION</span><h2>A different kind of innings</h2></div><span className="quiet-label">3 GAMES / NO API REQUIRED</span></div>
         <div className="pavilion-grid">
           <button className="pavilion-item hand" onClick={() => onNavigate("handcricket")}><div><span className="eyebrow">01 / YOU VS COMPUTER</span><h3>Hand Cricket</h3><span className="pavilion-action">Play a match<ArrowUpRight size={18} /></span></div><Hand size={80} strokeWidth={1.2} /></button>
           <button className="pavilion-item whatif" onClick={() => onNavigate("whatif")}><div><span className="eyebrow">02 / ALTERNATE OUTCOMES</span><h3>What If Lab</h3><span className="pavilion-action">Set the scenario<ArrowUpRight size={18} /></span></div><FlaskConical size={76} strokeWidth={1.2} /></button>
+          <button className="pavilion-item book" onClick={() => onNavigate("bookcricket")}><div><span className="eyebrow">03 / BETWEEN THE PAGES</span><h3>Book Cricket</h3><span className="pavilion-action">Open the book<ArrowUpRight size={18} /></span></div><BookOpen size={76} strokeWidth={1.2} /></button>
         </div>
       </section>
       <section className="overview-section">
