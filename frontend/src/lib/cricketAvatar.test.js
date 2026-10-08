@@ -2,6 +2,22 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import * as THREE from "three";
 import { createCricketAvatar } from "./cricketAvatar.js";
+import { bowlingFrame, BOWLER_HOME, UMPIRE_HOME } from "./cricketPresentation.js";
+
+test("the bowler clears the umpire and stumps before a centred release", () => {
+  assert.equal(UMPIRE_HOME[0], 0);
+  assert.ok(UMPIRE_HOME[2] < -8.4);
+  assert.deepEqual(bowlingFrame(0).position, BOWLER_HOME);
+  for (let step = 0; step <= 1000; step++) {
+    const delivery = bowlingFrame(step / 1000);
+    assert.ok(Math.hypot(delivery.position[0] - UMPIRE_HOME[0], delivery.position[2] - UMPIRE_HOME[2]) >= 1.09);
+    assert.ok(Math.hypot(delivery.position[0], delivery.position[2] + 8.4) > 0.75);
+  }
+  const release = bowlingFrame(0.58);
+  assert.equal(release.released, true);
+  assert.deepEqual(release.ball, [0, 2.53, -7.6]);
+  assert.ok(Math.abs(release.position[0] - 0.3) < 0.00001);
+});
 
 test("anatomical avatars have continuous skinned limbs, valid normals, and stable hand anchors", () => {
   for (const padded of [false, true]) {

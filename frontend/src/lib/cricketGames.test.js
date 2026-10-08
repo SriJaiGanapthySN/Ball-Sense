@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 import { createActor } from "xstate";
 import seedrandom from "seedrandom";
 import chaseModel from "./chaseModel.json" with { type: "json" };
-import { returnTimeline, victoryFrame, VICTORY_MS, deliveryRunningFrame, RECOVERY_MS, movementFacing, recoveryFrame, bowlingFrame } from "./cricketPresentation.js";
+import { returnTimeline, overthrowFrame, victoryFrame, VICTORY_MS, deliveryRunningFrame, RECOVERY_MS, movementFacing, recoveryFrame, bowlingFrame, dismissalForShot, UMPIRE_SIGNAL_MS, umpireSignalFrame } from "./cricketPresentation.js";
 import { DISMISSALS, FIELD_POSITIONS, CATCH_POSITIONS, KEEPER_INDEX, CHEER_MS, TEAM_COLORS, FIELDER_SPEED, CHEER_STAGE_CENTRES, CEREMONY_ORIGIN, inCheerStageBay, shotPlan, chaseFrame, handshakeLineFrame, awardFrame, cheeringTeam, presentationDuration, matchSummary, tossFrame, dismissalFrame, outcomeDuration, runningFrame, samplePresentation } from "./cricketPresentation.js";
 import { opponentPlan, sampleOpponent, training } from "./cricketOpponent.js";
-import { formatOvers, handCricketMachine, handMatchInsights, oversToBalls, SCENARIO_PRESETS, scenarioFromMatch, simulateChase, validateScenario } from "./cricketGames.js";
+import { formatOvers, handCricketMachine, handMatchInsights, handInningsLimits, oversToBalls, SCENARIO_PRESETS, scenarioFromMatch, simulateChase, validateScenario } from "./cricketGames.js";
 
 function startGame({ overs = 1, wicketLimit = 1, choice = "bat" } = {}) {
   const actor = createActor(handCricketMachine).start();
@@ -72,6 +72,36 @@ test("overthrows resume only after a missed throw and direct hits occur after sa
   }
 });
 
+test("overthrows preserve direction through a miss and deflect only on stump contact", () => {
+  for (const runs of [2, 3]) for (const side of [-1, 1]) for (let ball = 1; ball <= 4; ball++) for (const overthrowHit of [false, true]) {
+    const delivery = { runs, side, ball, overthrow: true, overthrowHit };
+    const timing = returnTimeline(delivery);
+    const before = overthrowFrame(timing, timing.hitAt - 0.01).ball;
+    const contact = overthrowFrame(timing, timing.hitAt).ball;
+    const after = overthrowFrame(timing, timing.hitAt + 0.01).ball;
+    assert.deepEqual(contact, timing.path.impact);
+    assert.ok(Math.hypot(...contact.map((value, axis) => value - before[axis])) < 0.001);
+    assert.ok(Math.hypot(...after.map((value, axis) => value - contact[axis])) < 0.001);
+    const incoming = Math.atan2(contact[0] - before[0], contact[2] - before[2]);
+    const outgoing = Math.atan2(after[0] - contact[0], after[2] - contact[2]);
+    const turn = Math.abs(Math.atan2(Math.sin(outgoing - incoming), Math.cos(outgoing - incoming)));
+    assert.ok(Math.abs(turn - (overthrowHit ? 0.48 : 0)) < 0.00001);
+    assert.equal(contact[0] === 0, overthrowHit);
+    const stopAt = timing.hitAt + timing.path.stopSeconds * 1000 + 1;
+    const stopped = overthrowFrame(timing, stopAt);
+    assert.equal(stopped.stopped, true);
+    stopped.ball.forEach((value, axis) => assert.ok(Math.abs(value - timing.path.loose[axis]) < 0.00001));
+    assert.deepEqual(overthrowFrame(timing, stopAt + 1000), stopped);
+    assert.ok(timing.retrieveAt >= stopAt - 1);
+    assert.ok(timing.caughtAt >= timing.retrieveAt + 650);
+    for (let elapsed = timing.releaseAt; elapsed <= stopAt; elapsed += 16) {
+      const frame = overthrowFrame(timing, elapsed);
+      assert.ok(frame.ball.every(Number.isFinite));
+      assert.ok(frame.ball[1] >= 0.1 - 0.00001);
+    }
+  }
+});
+
 test("six no-ball boundaries consume the over for either batting side", () => {
   for (const choice of ["bat", "bowl"]) {
     const actor = startGame({ choice });
@@ -95,12 +125,14 @@ test("precommitted fielding variants are occasional and never change the score",
   for (let index = 0; index < 1000; index++) {
     const sampled = samplePresentation(random);
     assert.ok(!(sampled.overthrow && sampled.directHit));
+    assert.ok(!sampled.overthrowHit || sampled.overthrow);
     counts[sampled.overthrow ? "overthrow" : sampled.directHit ? "directHit" : "ordinary"]++;
   }
   assert.ok(Object.values(counts).every((count) => count > 150 && count < 550));
   for (const runs of [2, 3]) {
-    actor.send({ type: "BALL", you: runs, computer: 6, overthrow: true, directHit: true });
+    actor.send({ type: "BALL", you: runs, computer: 6, overthrow: true, overthrowHit: true, directHit: true });
     assert.equal(actor.getSnapshot().context.lastBall.overthrow, true);
+    assert.equal(actor.getSnapshot().context.lastBall.overthrowHit, true);
     assert.equal(actor.getSnapshot().context.lastBall.directHit, false);
     assert.equal(actor.getSnapshot().context.lastBall.runs, runs);
   }
@@ -111,7 +143,7 @@ test("all hands score consistently and dismissals follow the attempted shot and 
   for (const choice of ["bat", "bowl"]) for (let you = 1; you <= 6; you++) for (let computer = 1; computer <= 6; computer++) {
     for (const candidate of DISMISSALS) for (const length of ["good length", "yorker", "short"]) {
       const actor = startGame({ choice });
-      actor.send({ type: "BALL", you, computer, length, dismissal: candidate, fielderIndex: KEEPER_INDEX, overthrow: true, directHit: true });
+      actor.send({ type: "BALL", you, computer, length, dismissal: candidate, fielderIndex: KEEPER_INDEX, overthrow: true, overthrowHit: true, directHit: true });
       const { context } = actor.getSnapshot();
       const ball = context.lastBall;
       const attempted = choice === "bat" ? you : computer;
@@ -122,19 +154,39 @@ test("all hands score consistently and dismissals follow the attempted shot and 
       assert.equal(context.scores[context.batting].balls, 1);
       if (ball.wicket) {
         assert.equal(ball.overthrow, false);
+        assert.equal(ball.overthrowHit, false);
         assert.equal(ball.directHit, false);
         assert.equal(ball.noBall, false);
         if (attempted >= 4) {
           assert.notEqual(ball.dismissal, "runout");
           assert.ok(ball.fielderIndex < KEEPER_INDEX);
         }
-        if (attempted === 6) assert.ok(["bowled", "caught"].includes(ball.dismissal));
-        if (length === "short") assert.ok(["caught", "runout"].includes(ball.dismissal));
+        if (attempted === 6) assert.ok(["bowled", "caught", "lbw"].includes(ball.dismissal));
+        if (length === "short") assert.ok(["bowled", "caught", "runout"].includes(ball.dismissal));
         if (attempted <= 3 && candidate === "runout") assert.equal(ball.dismissal, "runout");
       } else assert.equal(ball.dismissal, null);
       actor.stop();
     }
   }
+});
+
+test("eligible dismissals are sampled evenly without converting every invalid outcome to caught", () => {
+  for (const [runs, length, eligible] of [
+    [1, "good length", ["bowled", "caught", "lbw", "runout"]],
+    [6, "good length", ["bowled", "caught", "lbw"]],
+    [1, "short", ["bowled", "caught", "runout"]],
+    [6, "short", ["bowled", "caught"]],
+  ]) {
+    const counts = Object.fromEntries(eligible.map((kind) => [kind, 0]));
+    for (let draw = 0; draw < 1200; draw++) {
+      const kind = dismissalForShot(runs, "caught", length, (draw + 0.5) / 1200);
+      assert.ok(eligible.includes(kind));
+      counts[kind]++;
+    }
+    for (const count of Object.values(counts)) assert.equal(count, 1200 / eligible.length);
+  }
+  assert.equal(dismissalForShot(6, "runout", "good length"), "bowled");
+  assert.equal(dismissalForShot(6, "lbw", "good length"), "lbw");
 });
 
 test("victory poses respect either winner, ties and continuous handshake assembly", () => {
@@ -188,7 +240,7 @@ test("20,000 seeded presentation cases preserve scoring and coherent dismissal t
     const ball = actor.getSnapshot().context.lastBall;
     assert.equal(ball.wicket, you === computer);
     assert.equal(ball.runs, ball.wicket ? 0 : ball.batting === "you" ? you : computer);
-    const expectedDismissal = you >= 4 && presentation.dismissal === "runout" || you === 6 && presentation.dismissal === "lbw" ? "caught" : presentation.dismissal;
+    const expectedDismissal = dismissalForShot(you, presentation.dismissal, "good length", presentation.dismissalRoll);
     assert.equal(ball.dismissal, ball.wicket ? expectedDismissal : null);
     assert.equal(ball.fielderIndex, ball.wicket && you >= 4 && presentation.fielderIndex === KEEPER_INDEX ? 0 : presentation.fielderIndex);
     assert.equal(outcomeDuration(ball), ball.wicket ? dismissalFrame(expectedDismissal, progress).duration : ball.overthrow ? returnTimeline(ball).runningEnd : ball.runs === 5 ? 3300 : [1, 2, 3].includes(ball.runs) ? 500 + ball.runs * 1500 : 1700);
@@ -276,15 +328,119 @@ test("a chase stops immediately when the target is reached", () => {
   actor.stop();
 });
 
-test("all-out equal scores are a tie and a new match resets everything", () => {
+test("tied innings wait for a Super Over without recording a final result", () => {
   const actor = startGame();
   actor.send({ type: "BALL", you: 1, computer: 1 });
   actor.send({ type: "NEXT_INNINGS" });
   actor.send({ type: "BALL", you: 3, computer: 3 });
-  assert.equal(actor.getSnapshot().context.result.winner, "tie");
+  assert.equal(actor.getSnapshot().value, "superOverBreak");
+  assert.equal(actor.getSnapshot().context.result, null);
+  const regulation = actor.getSnapshot().context.scores;
+  actor.send({ type: "BALL", you: 6, computer: 1 });
+  assert.equal(actor.getSnapshot().context.history.length, 2);
+  actor.send({ type: "START_SUPER_OVER" });
+  let context = actor.getSnapshot().context;
+  assert.equal(actor.getSnapshot().value, "playing");
+  assert.equal(context.superOver, 1);
+  assert.equal(context.batting, "computer");
+  assert.equal(context.battingFirst, "computer");
+  assert.deepEqual(context.completedRounds[0].scores, regulation);
+  assert.deepEqual(context.scores, { you: { runs: 0, wickets: 0, balls: 0 }, computer: { runs: 0, wickets: 0, balls: 0 } });
+  assert.equal(context.history.length, 2);
+  assert.equal(context.lastBall, null);
+  actor.send({ type: "START_SUPER_OVER" });
+  assert.equal(actor.getSnapshot().context.superOver, 1);
   actor.send({ type: "RESET" });
   assert.equal(actor.getSnapshot().value, "setup");
-  assert.equal(actor.getSnapshot().context.history.length, 0);
+  context = actor.getSnapshot().context;
+  assert.equal(context.history.length, 0);
+  assert.equal(context.superOver, 0);
+  assert.deepEqual(context.completedRounds, []);
+  actor.stop();
+});
+
+test("Super Overs use three balls for one-over matches and six for every other format", () => {
+  for (const overs of [1, 2, 5]) for (const choice of ["bat", "bowl"]) {
+    const actor = startGame({ overs, choice });
+    actor.send({ type: "BALL", you: 1, computer: 1 });
+    actor.send({ type: "NEXT_INNINGS" });
+    actor.send({ type: "BALL", you: 1, computer: 1 });
+    actor.send({ type: "START_SUPER_OVER" });
+    const limit = overs === 1 ? 3 : 6;
+    assert.deepEqual(handInningsLimits(actor.getSnapshot().context), { balls: limit, wickets: 2 });
+    assert.equal(handMatchInsights(actor.getSnapshot().context).ballsLeft, limit);
+    assert.equal(opponentPlan(actor.getSnapshot().context).phase, "death");
+    for (let innings = 1; innings <= 2; innings++) {
+      const batting = actor.getSnapshot().context.batting;
+      for (let ball = 0; ball < limit; ball++) {
+        assert.equal(actor.getSnapshot().value, "playing");
+        actor.send({ type: "BALL", you: batting === "you" ? 1 : 6, computer: batting === "computer" ? 1 : 6 });
+        assert.equal(actor.getSnapshot().context.lastBall.superOver, 1);
+      }
+      assert.equal(actor.getSnapshot().context.scores[batting].balls, limit);
+      if (innings === 1) actor.send({ type: "NEXT_INNINGS" });
+    }
+    assert.equal(actor.getSnapshot().value, "superOverBreak");
+    assert.equal(actor.getSnapshot().context.result, null);
+    actor.send({ type: "START_SUPER_OVER" });
+    assert.equal(actor.getSnapshot().context.superOver, 2);
+    assert.equal(actor.getSnapshot().context.completedRounds.length, 2);
+    assert.equal(actor.getSnapshot().context.batting, choice === "bat" ? "you" : "computer");
+    assert.equal(handInningsLimits(actor.getSnapshot().context).balls, limit);
+    actor.stop();
+  }
+});
+
+test("Super Overs stop after two wickets or a successful chase and award only the final winner", () => {
+  const actor = startGame();
+  actor.send({ type: "BALL", you: 1, computer: 1 });
+  actor.send({ type: "NEXT_INNINGS" });
+  actor.send({ type: "BALL", you: 1, computer: 1 });
+  actor.send({ type: "START_SUPER_OVER" });
+  actor.send({ type: "BALL", you: 2, computer: 2 });
+  assert.equal(actor.getSnapshot().value, "playing");
+  actor.send({ type: "BALL", you: 2, computer: 2 });
+  assert.equal(actor.getSnapshot().value, "inningsBreak");
+  assert.equal(actor.getSnapshot().context.target, 1);
+  actor.send({ type: "NEXT_INNINGS" });
+  actor.send({ type: "BALL", you: 1, computer: 6 });
+  assert.equal(actor.getSnapshot().value, "finished");
+  assert.deepEqual(actor.getSnapshot().context.result, { winner: "you", margin: "2 wickets in Super Over 1" });
+  assert.equal(actor.getSnapshot().context.scores.you.balls, 1);
+  assert.equal(actor.getSnapshot().context.completedRounds[0].scores.you.runs, 0);
+  actor.stop();
+});
+
+test("Super Over scorecards stay separate while awards use the entire match", () => {
+  const actor = startGame();
+  actor.send({ type: "BALL", you: 5, computer: 1 });
+  actor.send({ type: "BALL", you: 1, computer: 1 });
+  actor.send({ type: "NEXT_INNINGS" });
+  actor.send({ type: "BALL", you: 1, computer: 5 });
+  actor.send({ type: "BALL", you: 1, computer: 1 });
+  actor.send({ type: "START_SUPER_OVER" });
+  actor.send({ type: "BALL", you: 6, computer: 2 });
+  actor.send({ type: "BALL", you: 1, computer: 1 });
+  actor.send({ type: "BALL", you: 1, computer: 1 });
+  actor.send({ type: "NEXT_INNINGS" });
+  actor.send({ type: "BALL", you: 6, computer: 1 });
+  const context = actor.getSnapshot().context;
+  const current = matchSummary(context);
+  const regulation = matchSummary(context, 0);
+  assert.equal(current.sides[0].runs, 6);
+  assert.equal(current.sides[0].extras, 0);
+  assert.equal(current.sides[0].fours, 0);
+  assert.equal(current.sides[0].sixes, 1);
+  assert.deepEqual(current.sides[1].falls, [{ wicket: 1, runs: 2, ball: 2 }, { wicket: 2, runs: 2, ball: 3 }]);
+  assert.equal(regulation.sides[0].runs, 5);
+  assert.equal(regulation.sides[0].extras, 1);
+  assert.equal(regulation.sides[0].fours, 1);
+  assert.deepEqual(regulation.sides[0].falls, [{ wicket: 1, runs: 5, ball: 2 }]);
+  assert.equal(current.award[0].side, "you");
+  assert.equal(current.award[0].runs, 11);
+  assert.equal(current.award[0].extras, 1);
+  assert.equal(current.award[0].wicketsTaken, 3);
+  assert.deepEqual(current.award, regulation.award);
   actor.stop();
 });
 
@@ -586,12 +742,42 @@ test("keeper catches are sampled, retained by scoring and stay behind the stumps
   actor.stop();
 });
 
+test("no-ball, four and six signals have separate complete stages before celebration", () => {
+  for (const runs of [4, 5, 6]) {
+    const delivery = { runs, batting: "you" };
+    const boundaryAt = outcomeDuration(delivery);
+    assert.equal(umpireSignalFrame(delivery, 1699).kind, null);
+    if (runs === 5) {
+      assert.equal(umpireSignalFrame(delivery, 2200).kind, "no-ball");
+      assert.equal(umpireSignalFrame(delivery, 2200).amount, 1);
+    }
+    assert.equal(umpireSignalFrame(delivery, boundaryAt + 600).kind, runs === 6 ? "six" : "four");
+    assert.equal(umpireSignalFrame(delivery, boundaryAt + 600).amount, 1);
+    assert.equal(umpireSignalFrame(delivery, boundaryAt + UMPIRE_SIGNAL_MS).kind, null);
+    assert.equal(presentationDuration(delivery), boundaryAt + UMPIRE_SIGNAL_MS + CHEER_MS + RECOVERY_MS);
+  }
+  assert.equal(umpireSignalFrame({ runs: 0, wicket: true }, 2300).kind, null);
+  const four = { runs: 4 };
+  assert.notEqual(umpireSignalFrame(four, 2100).sweep, umpireSignalFrame(four, 2500).sweep);
+});
+
+test("wicket trajectories continue from the delivered height including short-ball inside edges", () => {
+  for (const kind of DISMISSALS) for (const length of ["yorker", "good length", "short"]) {
+    assert.deepEqual(dismissalFrame(kind, 0, 1, 0, length).ball, bowlingFrame(1, length).ball);
+  }
+  const edge = dismissalFrame("bowled", 0.08, 1, 0, "short");
+  assert.ok(edge.swing > 0);
+  assert.match(edge.shot, /INSIDE EDGE/);
+  assert.equal(edge.brokenEnd, null);
+  assert.equal(dismissalFrame("bowled", 0.16, 1, 0, "short").brokenEnd, 1);
+});
+
 test("cheers follow the scoring team or wicket-taking team after the outcome", () => {
   for (const batting of ["you", "computer"]) {
     for (const runs of [1, 2, 3, 4, 5, 6]) {
       const ball = { batting, runs, wicket: false };
       assert.equal(cheeringTeam(ball), [4, 5, 6].includes(runs) ? batting : null);
-      assert.equal(presentationDuration(ball), ([4, 5, 6].includes(runs) ? outcomeDuration(ball) + CHEER_MS : returnTimeline(ball).caughtAt + 350) + RECOVERY_MS);
+      assert.equal(presentationDuration(ball), ([4, 5, 6].includes(runs) ? outcomeDuration(ball) + UMPIRE_SIGNAL_MS + CHEER_MS : returnTimeline(ball).caughtAt + 350) + RECOVERY_MS);
     }
     const ball = { batting, wicket: true, dismissal: "caught" };
     assert.equal(cheeringTeam(ball), batting === "you" ? "computer" : "you");

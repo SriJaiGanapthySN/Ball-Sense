@@ -24,10 +24,17 @@ def initial_context(overs, wicket_limit):
     return {
         "overs": overs, "wicketLimit": wicket_limit, "innings": 1,
         "batting": "you", "battingFirst": "you",
+        "superOver": 0, "completedRounds": [],
         "scores": {side: {"runs": 0, "wickets": 0, "balls": 0} for side in SIDES},
         "target": None, "history": [], "lastBall": None, "result": None,
         "tossWinner": None, "coin": None,
     }
+
+
+def innings_limits(context):
+    if context["superOver"]:
+        return (3 if context["overs"] == 1 else 6), 2
+    return context["overs"] * 6, context["wicketLimit"]
 
 
 @dataclass
@@ -154,7 +161,7 @@ class Room:
                 self.toss_started_at = None
                 self.toss_stage_started_at = None
                 self.transition("lobby", now)
-        elif event == "READY" and self.phase in ("lobby", "ready", "reveal", "inningsBreak"):
+        elif event == "READY" and self.phase in ("lobby", "ready", "reveal", "inningsBreak", "superOverBreak"):
             self.ready.add(side)
             if len(self.ready) == 2:
                 if self.phase == "lobby":
@@ -162,6 +169,18 @@ class Room:
                     self.stage_toss("call", now)
                 elif self.phase == "inningsBreak":
                     self.context.update(innings=2, batting=other_side(self.context["battingFirst"]), lastBall=None)
+                    self.transition("playing", now)
+                elif self.phase == "superOverBreak":
+                    context = self.context
+                    context["completedRounds"].append({
+                        "superOver": context["superOver"], "battingFirst": context["battingFirst"],
+                        "scores": copy.deepcopy(context["scores"]),
+                    })
+                    context.update(
+                        superOver=context["superOver"] + 1, innings=1, battingFirst=context["batting"],
+                        scores={player_side: {"runs": 0, "wickets": 0, "balls": 0} for player_side in SIDES},
+                        target=None, lastBall=None, result=None,
+                    )
                     self.transition("playing", now)
                 else:
                     self.transition(self.after_reveal if self.phase == "reveal" else "playing", now)
@@ -206,41 +225,45 @@ class Room:
         score["runs"] += runs
         score["wickets"] += int(wicket)
         score["balls"] += 1
-        dismissal = secrets.choice(("bowled", "caught", "lbw", "runout")) if wicket else None
         length = secrets.choice(("yorker", "good length", "short"))
-        if wicket and (
-            attempted_runs >= 4 and dismissal == "runout"
-            or attempted_runs == 6 and dismissal == "lbw"
-            or length == "short" and dismissal in ("bowled", "lbw")
-        ):
-            dismissal = "caught"
+        eligible = ("bowled", "caught") if length == "short" else ("bowled", "caught", "lbw")
+        if attempted_runs <= 3:
+            eligible += ("runout",)
+        dismissal = secrets.choice(eligible) if wicket else None
         keeper_catch = dismissal == "caught" and attempted_runs <= 3
         overthrow = not wicket and runs in (2, 3) and secrets.randbelow(100) < 30
         delivery = {
             **self.pending, "runs": runs, "attemptedRuns": attempted_runs, "wicket": wicket, "batting": batting,
-            "ball": score["balls"], "innings": context["innings"],
+            "ball": score["balls"], "innings": context["innings"], "superOver": context["superOver"],
             "length": length,
             "dismissal": dismissal, "side": secrets.choice((-1, 1)),
             "fielderIndex": secrets.randbelow(10 if keeper_catch else 9),
             "noBall": not wicket and runs == 5, "batRuns": 4 if runs == 5 else runs,
             "extras": int(not wicket and runs == 5), "overthrow": overthrow,
+            "overthrowHit": overthrow and secrets.randbelow(3) == 0,
             "directHit": not wicket and not overthrow and runs in (1, 2, 3) and secrets.randbelow(100) < 25,
         }
         context["lastBall"] = delivery
         context["history"].append(delivery)
         self.pending.clear()
         self.turn += 1
-        innings_over = score["wickets"] >= context["wicketLimit"] or score["balls"] >= context["overs"] * 6
+        ball_limit, wicket_limit = innings_limits(context)
+        innings_over = score["wickets"] >= wicket_limit or score["balls"] >= ball_limit
         chased = context["innings"] == 2 and score["runs"] >= context["target"]
         if context["innings"] == 2 and (chased or innings_over):
             difference = context["scores"]["you"]["runs"] - context["scores"]["computer"]["runs"]
-            remaining = context["wicketLimit"] - score["wickets"]
-            margin = "Scores level" if difference == 0 else (
-                f"{remaining} wicket{'s' if remaining != 1 else ''}" if chased
-                else f"{abs(difference)} run{'s' if abs(difference) != 1 else ''}"
-            )
-            context["result"] = {"winner": "tie" if difference == 0 else "you" if difference > 0 else "computer", "margin": margin, "reason": "completed"}
-            self.after_reveal = "finished"
+            if difference == 0:
+                self.after_reveal = "superOverBreak"
+            else:
+                remaining = wicket_limit - score["wickets"]
+                margin = (
+                    f"{remaining} wicket{'s' if remaining != 1 else ''}" if chased
+                    else f"{abs(difference)} run{'s' if abs(difference) != 1 else ''}"
+                )
+                if context["superOver"]:
+                    margin += f" in Super Over {context['superOver']}"
+                context["result"] = {"winner": "you" if difference > 0 else "computer", "margin": margin, "reason": "completed"}
+                self.after_reveal = "finished"
         elif innings_over:
             context["target"] = score["runs"] + 1
             self.after_reveal = "inningsBreak"

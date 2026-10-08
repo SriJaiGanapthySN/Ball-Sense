@@ -2,7 +2,7 @@ import json
 import unittest
 from unittest.mock import patch
 
-from src.hand_multiplayer import MatchError, Room
+from src.hand_multiplayer import MatchError, Room, innings_limits
 
 
 class HandMultiplayerTests(unittest.TestCase):
@@ -39,6 +39,15 @@ class HandMultiplayerTests(unittest.TestCase):
         self.action(room, "you", "PICK", pick=host)
         self.action(room, "computer", "PICK", pick=guest)
 
+    def tie_regulation(self, room, batting_first="you"):
+        self.start(room)
+        room.context.update(batting=batting_first, battingFirst=batting_first)
+        self.ball(room, 1, 1)
+        self.both_ready(room)
+        self.both_ready(room)
+        self.ball(room, 1, 1)
+        self.both_ready(room)
+
     def test_picks_and_tokens_stay_private_until_both_commit(self):
         room = self.make_room()
         self.start(room)
@@ -67,7 +76,10 @@ class HandMultiplayerTests(unittest.TestCase):
                                 room = self.make_room()
                                 room.context["batting"] = batting
                                 room.pending = {"you": host, "computer": guest}
-                                choices = [candidate, length, -1] if host == guest else [length, -1]
+                                eligible = ["bowled", "caught"] if length == "short" else ["bowled", "caught", "lbw"]
+                                if (host if batting == "you" else guest) <= 3:
+                                    eligible.append("runout")
+                                choices = [length, candidate if candidate in eligible else eligible[0], -1] if host == guest else [length, -1]
                                 with patch("src.hand_multiplayer.secrets.choice", side_effect=choices), patch("src.hand_multiplayer.secrets.randbelow", side_effect=lambda limit: limit - 1):
                                     room.score(100)
                                 delivery = room.context["lastBall"]
@@ -80,18 +92,46 @@ class HandMultiplayerTests(unittest.TestCase):
                                 if delivery["wicket"]:
                                     self.assertFalse(delivery["noBall"])
                                     self.assertFalse(delivery["overthrow"])
+                                    self.assertFalse(delivery["overthrowHit"])
                                     self.assertFalse(delivery["directHit"])
                                     if attempted >= 4:
                                         self.assertNotEqual(delivery["dismissal"], "runout")
                                         self.assertLess(delivery["fielderIndex"], 9)
                                     if attempted == 6:
-                                        self.assertIn(delivery["dismissal"], ("bowled", "caught"))
+                                        self.assertIn(delivery["dismissal"], ("bowled", "caught", "lbw"))
                                     if length == "short":
-                                        self.assertIn(delivery["dismissal"], ("caught", "runout"))
+                                        self.assertIn(delivery["dismissal"], ("bowled", "caught", "runout"))
                                     if attempted <= 3 and candidate == "runout":
                                         self.assertEqual(delivery["dismissal"], "runout")
                                 else:
                                     self.assertIsNone(delivery["dismissal"])
+
+    def test_wicket_choices_use_the_eligible_pool_instead_of_a_catch_fallback(self):
+        for attempted in (1, 6):
+            for length in ("good length", "short"):
+                room = self.make_room()
+                room.pending = {"you": attempted, "computer": attempted}
+                with patch("src.hand_multiplayer.secrets.choice", side_effect=[length, "bowled", 1]) as choose:
+                    room.score(100)
+                pool = choose.call_args_list[1].args[0]
+                self.assertIn("bowled", pool)
+                self.assertIn("caught", pool)
+                self.assertEqual("lbw" in pool, length != "short")
+                self.assertEqual("runout" in pool, attempted <= 3)
+                self.assertEqual(room.context["lastBall"]["dismissal"], "bowled")
+
+    def test_overthrow_stump_contact_is_optional_and_shared_without_an_extra_wicket(self):
+        for hit in (True, False):
+            room = self.make_room()
+            room.pending = {"you": 3, "computer": 6}
+            with patch("src.hand_multiplayer.secrets.randbelow", side_effect=lambda limit: 0 if limit != 3 or hit else 2):
+                room.score(100)
+            delivery = room.context["lastBall"]
+            self.assertTrue(delivery["overthrow"])
+            self.assertEqual(delivery["overthrowHit"], hit)
+            self.assertFalse(delivery["directHit"])
+            self.assertEqual(room.context["scores"]["you"], {"runs": 3, "wickets": 0, "balls": 1})
+            self.assertEqual(room.snapshot("you")["context"]["lastBall"], room.snapshot("computer")["context"]["lastBall"])
 
     def test_two_innings_chase_and_joint_rematch(self):
         room = self.make_room()
@@ -222,8 +262,85 @@ class HandMultiplayerTests(unittest.TestCase):
             self.both_ready(room)
             self.both_ready(room)
             self.ball(room, 2, 2)
-            self.assertEqual(room.context["result"]["winner"], "you" if first_runs else "tie")
-            self.assertEqual(room.context["result"]["margin"], "4 runs" if first_runs else "Scores level")
+            if first_runs:
+                self.assertEqual(room.context["result"]["winner"], "you")
+                self.assertEqual(room.context["result"]["margin"], "4 runs")
+            else:
+                self.assertIsNone(room.context["result"])
+                self.assertEqual(room.after_reveal, "superOverBreak")
+
+    def test_super_over_waits_for_both_players_and_preserves_regulation_scores(self):
+        room = self.make_room()
+        self.tie_regulation(room)
+        self.assertEqual(room.phase, "superOverBreak")
+        self.assertIsNone(room.context["result"])
+        final_ball = room.context["lastBall"]
+        self.action(room, "you", "READY")
+        self.assertEqual(room.phase, "superOverBreak")
+        room.connect("computer", False, 110)
+        room.connect("computer", True, 111)
+        self.assertEqual(room.snapshot("computer")["ready"], ["you"])
+        self.action(room, "computer", "READY")
+        self.assertEqual(room.phase, "playing")
+        self.assertEqual(room.context["superOver"], 1)
+        self.assertEqual(room.context["battingFirst"], "computer")
+        self.assertEqual(innings_limits(room.context), (3, 2))
+        self.assertEqual(room.context["completedRounds"][0]["scores"]["you"], {"runs": 0, "wickets": 1, "balls": 1})
+        self.assertEqual(room.context["history"][-1], final_ball)
+        self.assertIsNone(room.context["lastBall"])
+        self.assertIsNone(room.context["target"])
+        self.assertEqual(room.snapshot("you")["context"], room.snapshot("computer")["context"])
+        with self.assertRaises(MatchError):
+            self.action(room, "you", "READY")
+
+    def test_super_over_ball_limits_and_repeated_ties_for_both_batting_orders(self):
+        for overs in (1, 2, 5):
+            for first in ("you", "computer"):
+                with self.subTest(overs=overs, batting_first=first):
+                    room = self.make_room(overs=overs)
+                    self.tie_regulation(room, first)
+                    self.both_ready(room)
+                    limit = 3 if overs == 1 else 6
+                    self.assertEqual(innings_limits(room.context), (limit, 2))
+                    for innings in (1, 2):
+                        batting = room.context["batting"]
+                        for _ in range(limit):
+                            self.assertEqual(room.phase, "playing")
+                            self.ball(room, 1 if batting == "you" else 6, 1 if batting == "computer" else 6)
+                            self.assertEqual(room.context["lastBall"]["superOver"], 1)
+                            self.both_ready(room)
+                        self.assertEqual(room.context["scores"][batting]["balls"], limit)
+                        if innings == 1:
+                            self.assertEqual(room.phase, "inningsBreak")
+                            self.both_ready(room)
+                    self.assertEqual(room.phase, "superOverBreak")
+                    self.assertIsNone(room.context["result"])
+                    self.both_ready(room)
+                    self.assertEqual(room.context["superOver"], 2)
+                    self.assertEqual(room.context["battingFirst"], first)
+                    self.assertEqual(len(room.context["completedRounds"]), 2)
+                    self.assertEqual(innings_limits(room.context), (limit, 2))
+
+    def test_super_over_two_wickets_early_chase_and_rematch(self):
+        room = self.make_room()
+        self.tie_regulation(room)
+        self.both_ready(room)
+        for wicket in (1, 2):
+            self.ball(room, 2, 2)
+            self.both_ready(room)
+            self.assertEqual(room.phase, "playing" if wicket == 1 else "inningsBreak")
+        self.assertEqual(room.context["target"], 1)
+        self.both_ready(room)
+        self.ball(room, 1, 6)
+        self.assertEqual(room.context["result"], {"winner": "you", "margin": "2 wickets in Super Over 1", "reason": "completed"})
+        self.assertEqual(room.context["scores"]["you"]["balls"], 1)
+        self.both_ready(room)
+        self.action(room, "you", "REMATCH")
+        self.action(room, "computer", "REMATCH")
+        self.assertEqual(room.phase, "lobby")
+        self.assertEqual(room.context["superOver"], 0)
+        self.assertEqual(room.context["completedRounds"], [])
+        self.assertEqual(room.context["history"], [])
 
     def test_old_ball_and_old_rematch_cannot_mutate_current_game(self):
         room = self.make_room()

@@ -7,26 +7,33 @@ import { dismissalForShot, CATCH_POSITIONS, KEEPER_INDEX } from "./cricketPresen
 const emptyScore = () => ({ runs: 0, wickets: 0, balls: 0 });
 export const initialHandContext = () => ({
   overs: 2, wicketLimit: 3, innings: 1, batting: "you", battingFirst: "you",
+  superOver: 0, completedRounds: [],
   scores: { you: emptyScore(), computer: emptyScore() },
   target: null, history: [], lastBall: null, result: null, tossWinner: null, coin: null,
 });
+export const handInningsLimits = (context) => ({
+  balls: context.superOver ? context.overs === 1 ? 3 : 6 : context.overs * 6,
+  wickets: context.superOver ? 2 : context.wicketLimit,
+});
 const validPick = (value) => Number.isInteger(value) && value >= 1 && value <= 6;
-const inningsOver = (context) => context.scores[context.batting].wickets >= context.wicketLimit || context.scores[context.batting].balls >= context.overs * 6;
+const inningsOver = (context) => context.scores[context.batting].wickets >= handInningsLimits(context).wickets || context.scores[context.batting].balls >= handInningsLimits(context).balls;
 
 function scoreDelivery(context, event) {
   const wicket = event.you === event.computer;
   const attemptedRuns = event[context.batting];
   const runs = wicket ? 0 : attemptedRuns;
   const length = event.length || "good length";
-  const dismissal = wicket ? dismissalForShot(attemptedRuns, event.dismissal, length) : null;
+  const dismissal = wicket ? dismissalForShot(attemptedRuns, event.dismissal, length, event.dismissalRoll) : null;
   const keeperCatch = dismissal === "caught" && attemptedRuns <= 3;
   const previous = context.scores[context.batting];
   const score = { runs: previous.runs + runs, wickets: previous.wickets + Number(wicket), balls: previous.balls + 1 };
   const delivery = { you: event.you, computer: event.computer, runs, attemptedRuns, wicket, batting: context.batting, ball: score.balls, innings: context.innings, length, dismissal, side: event.side === -1 ? -1 : 1, fielderIndex: Number.isInteger(event.fielderIndex) && CATCH_POSITIONS[event.fielderIndex] && (event.fielderIndex < KEEPER_INDEX || keeperCatch || !wicket && event.dismissal === "caught") ? event.fielderIndex : 0 };
+  delivery.superOver = context.superOver;
   delivery.noBall = !wicket && runs === 5;
   delivery.batRuns = delivery.noBall ? 4 : runs;
   delivery.extras = Number(delivery.noBall);
   delivery.overthrow = !wicket && [2, 3].includes(runs) && event.overthrow === true;
+  delivery.overthrowHit = delivery.overthrow && event.overthrowHit === true;
   delivery.directHit = !wicket && [1, 2, 3].includes(runs) && !delivery.overthrow && event.directHit === true;
   return { scores: { ...context.scores, [context.batting]: score }, lastBall: delivery, history: [...context.history, delivery] };
 }
@@ -69,13 +76,18 @@ export const handCricketMachine = createMachine({
     resolving: {
       always: [
         {
+          guard: ({ context }) => context.innings === 2 && inningsOver(context) && context.scores.you.runs === context.scores.computer.runs,
+          target: "superOverBreak",
+        },
+        {
           guard: ({ context }) => context.innings === 2 && (context.scores[context.batting].runs >= context.target || inningsOver(context)),
           target: "finished",
           actions: assign(({ context }) => {
             const difference = context.scores.you.runs - context.scores.computer.runs;
             const chased = context.scores[context.batting].runs >= context.target;
-            const remainingWickets = context.wicketLimit - context.scores[context.batting].wickets;
-            return { result: { winner: difference === 0 ? "tie" : difference > 0 ? "you" : "computer", margin: difference === 0 ? "Scores level" : chased ? `${remainingWickets} wicket${remainingWickets === 1 ? "" : "s"}` : `${Math.abs(difference)} run${Math.abs(difference) === 1 ? "" : "s"}` } };
+            const remainingWickets = handInningsLimits(context).wickets - context.scores[context.batting].wickets;
+            const margin = chased ? `${remainingWickets} wicket${remainingWickets === 1 ? "" : "s"}` : `${Math.abs(difference)} run${Math.abs(difference) === 1 ? "" : "s"}`;
+            return { result: { winner: difference > 0 ? "you" : "computer", margin: context.superOver ? `${margin} in Super Over ${context.superOver}` : margin } };
           }),
         },
         { guard: ({ context }) => inningsOver(context), target: "inningsBreak", actions: assign(({ context }) => ({ target: context.scores[context.batting].runs + 1 })) },
@@ -84,6 +96,18 @@ export const handCricketMachine = createMachine({
     },
     inningsBreak: {
       on: { NEXT_INNINGS: { target: "playing", actions: assign(({ context }) => ({ innings: 2, batting: context.battingFirst === "you" ? "computer" : "you", lastBall: null })) } },
+    },
+    superOverBreak: {
+      on: {
+        START_SUPER_OVER: {
+          target: "playing",
+          actions: assign(({ context }) => ({
+            completedRounds: [...context.completedRounds, { superOver: context.superOver, battingFirst: context.battingFirst, scores: context.scores }],
+            superOver: context.superOver + 1, innings: 1, battingFirst: context.batting,
+            scores: { you: emptyScore(), computer: emptyScore() }, target: null, lastBall: null, result: null,
+          })),
+        },
+      },
     },
     finished: {},
   },
@@ -95,7 +119,7 @@ export function formatOvers(balls) {
 
 export function handMatchInsights(context, playerSide = "you") {
   const score = context.scores[context.batting];
-  const ballsLeft = Math.max(0, context.overs * 6 - score.balls);
+  const ballsLeft = Math.max(0, handInningsLimits(context).balls - score.balls);
   const runsNeeded = context.target == null ? null : Math.max(0, context.target - score.runs);
   const requiredRate = runsNeeded == null || !ballsLeft || context.result ? null : runsNeeded * 6 / ballsLeft;
   const boundaries = context.history.filter((ball) => ball.batting === playerSide && [4, 5, 6].includes(ball.runs)).length;

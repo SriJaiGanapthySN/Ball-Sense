@@ -1,4 +1,5 @@
 import training from "./cricketTraining.js";
+import { handInningsLimits } from "./cricketGames.js";
 
 export { training };
 export const DELIVERY_MS = 1400;
@@ -7,8 +8,9 @@ const normalize = (weights) => weights.map((weight) => weight / weights.reduce((
 
 export function opponentPlan(context, batterIndex = 0, bowlerIndex = 0, mode = "adaptive") {
   const score = context.scores[context.batting];
-  const fraction = score.balls / (context.overs * 6);
-  const phase = fraction < 0.3 ? "powerplay" : fraction >= 0.8 ? "death" : "middle";
+  const limits = handInningsLimits(context);
+  const fraction = score.balls / limits.balls;
+  const phase = context.superOver ? "death" : fraction < 0.3 ? "powerplay" : fraction >= 0.8 ? "death" : "middle";
   const batter = training.batters[batterIndex] || training.batters[0];
   const bowler = training.bowlers[bowlerIndex] || training.bowlers[0];
   const observed = context.history.filter((ball) => ball.batting === context.batting).slice(-24);
@@ -21,7 +23,7 @@ export function opponentPlan(context, batterIndex = 0, bowlerIndex = 0, mode = "
   const prediction = normalize(counts);
   const bowling = bowler.phases[phase] || Object.values(bowler.phases)[0];
   const lengths = Object.entries(bowling).filter(([key]) => key.startsWith("length:"));
-  const ballsLeft = Math.max(1, context.overs * 6 - score.balls);
+  const ballsLeft = Math.max(1, limits.balls - score.balls);
   const needed = context.target == null ? null : Math.max(1, context.target - score.runs);
   const pressure = needed == null ? fraction : Math.min(1.5, needed / ballsLeft / 4);
   let weights;
@@ -33,7 +35,7 @@ export function opponentPlan(context, batterIndex = 0, bowlerIndex = 0, mode = "
   } else {
     const outcomes = batter.phases[phase] || Object.values(batter.phases)[0];
     const scoring = normalize(outcomes.slice(1).map((count) => count + 8));
-    const wicketsLeft = Math.max(1, context.wicketLimit - score.wickets);
+    const wicketsLeft = Math.max(1, limits.wickets - score.wickets);
     const survival = 2 + 3 / wicketsLeft;
     weights = scoring.map((chance, index) => {
       const runs = index + 1;
