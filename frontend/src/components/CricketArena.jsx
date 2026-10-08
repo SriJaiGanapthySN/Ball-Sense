@@ -4,6 +4,7 @@ import { createCricketAvatar } from "../lib/cricketAvatar.js";
 import { synchronizedElapsed } from "../lib/handMultiplayer.js";
 import { DELIVERY_MS } from "../lib/cricketOpponent.js";
 import { returnTimeline, overthrowFrame, victoryFrame, VICTORY_MS, deliveryShotPlan, deliveryRunningFrame, RECOVERY_MS, recoveryFrame, bowlingFrame, movementFacing, UMPIRE_HOME, BOWLER_HOME, BALL_RADIUS, UMPIRE_SIGNAL_MS, umpireSignalFrame } from "../lib/cricketPresentation.js";
+import { BATTER_HOME, NON_STRIKER_HOME, deliveryBattingEnds, strikerIndexForDelivery } from "../lib/cricketPresentation.js";
 import { FIELD_POSITIONS, KEEPER_INDEX, TEAM_COLORS, FIELDER_SPEED, CHEER_STAGE_CENTRES, CEREMONY_ORIGIN, inCheerStageBay, TOSS_MS, HANDSHAKE_MS, POST_MATCH_MS, shotPlan, chaseFrame, handshakeLineFrame, awardFrame, cheeringTeam, presentationDuration, tossFrame, dismissalFrame, outcomeDuration, runningFrame } from "../lib/cricketPresentation.js";
 
 export default function CricketArena({ active, phase, lastBall, presentedBall = null, revealing, cameraView, motion, batting, bowlingLength = "good length", tossStage = "none", tossCoin = null, tossTiming = null, ceremony = null, awardTeams = "", winner = "tie", teamNames = null, scoreboard = null, onPresentationComplete, onCeremonyComplete }) {
@@ -370,17 +371,16 @@ export default function CricketArena({ active, phase, lastBall, presentedBall = 
       scene.add(player);
       return player;
     }
-    const batter = cricketer([0.65, 0.05, 7], battingKit, true);
-    batter.userData.homeFacing = -0.25;
-    const bat = new THREE.Group();
-    bat.position.set(0, -0.38, 0);
-    batter.userData.elbows[0].add(bat);
-    box([0.085, 0.38, 0.085], leather, [0, -0.14, 0], bat);
-    box([0.25, 0.72, 0.11], material("#d6bf84"), [0, -0.67, 0], bat);
-    box([0.14, 0.18, 0.015], helmetMaterial, [0, -0.6, -0.065], bat);
-    const nonStriker = cricketer([-1.3, 0.05, -7], battingKit, true);
-    nonStriker.userData.homeFacing = Math.PI;
-    const runningBat = box([0.23, 0.92, 0.1], material("#d6bf84"), [0, -0.77, 0], nonStriker.userData.elbows[0]);
+    const batters = [cricketer(BATTER_HOME, battingKit, true), cricketer(NON_STRIKER_HOME, battingKit, true)];
+    const bats = batters.map((player) => {
+      const bat = new THREE.Group();
+      bat.position.set(0, -0.38, 0);
+      player.userData.elbows[0].add(bat);
+      box([0.085, 0.38, 0.085], leather, [0, -0.14, 0], bat);
+      box([0.25, 0.72, 0.11], material("#d6bf84"), [0, -0.67, 0], bat);
+      box([0.14, 0.18, 0.015], helmetMaterial, [0, -0.6, -0.065], bat);
+      return bat;
+    });
     const bowler = cricketer(BOWLER_HOME, bowlingKit);
     bowler.userData.homeFacing = Math.PI;
     bowler.rotation.y = Math.PI;
@@ -393,7 +393,7 @@ export default function CricketArena({ active, phase, lastBall, presentedBall = 
     addMesh(new THREE.CylinderGeometry(0.118, 0.147, 0.1, 24), umpireKit, [0, 0.125, 0.008], umpire.userData.head);
     const umpireFinger = addMesh(new THREE.CapsuleGeometry(0.014, 0.09, 4, 8), umpire.userData.skinMaterial, [0, -0.5, 0], umpire.userData.elbows[1]);
     umpireFinger.visible = false;
-    const allPlayers = [batter, nonStriker, bowler, keeper, ...fielders, umpire];
+    const allPlayers = [...batters, bowler, keeper, ...fielders, umpire];
     const captains = [cricketer([-1.6, 0.05, 0.4], teamKits.you), cricketer([1.6, 0.05, 0.4], teamKits.computer)];
     const squads = ["you", "computer"].map((team, teamIndex) => [captains[teamIndex], ...Array.from({ length: 10 }, () => cricketer([0, 0.05, 0], teamKits[team]))]);
     const suit = material("#111215", { roughness: 0.9 });
@@ -591,9 +591,9 @@ export default function CricketArena({ active, phase, lastBall, presentedBall = 
       const delta = Math.max(0, (time - lastTime) / 1000);
       lastTime = Math.max(lastTime, time);
       if (state.lastBall !== previousBall || state.revealing !== previousReveal) {
+        if (state.revealing !== previousReveal || !state.revealing) actionElapsed = 0;
         previousBall = state.lastBall;
         previousReveal = state.revealing;
-        actionElapsed = 0;
         recoveryPoses = null;
         currentShot = state.lastBall && !state.lastBall.wicket ? deliveryShotPlan(state.lastBall) : null;
         currentReturn = currentShot?.chase ? returnTimeline(state.lastBall, currentShot) : null;
@@ -617,6 +617,15 @@ export default function CricketArena({ active, phase, lastBall, presentedBall = 
       if (running && !document.hidden && state.motion) ceremonyElapsed += delta * 1000;
       const compact = camera.aspect < 1.25;
       const delivery = state.lastBall !== completedDelivery && state.lastBall !== state.presentedBall ? state.lastBall : null;
+      const striker = strikerIndexForDelivery(state.scoreboard, delivery);
+      const batter = batters[striker];
+      const nonStriker = batters[1 - striker];
+      const bat = bats[striker];
+      const runningBat = bats[1 - striker];
+      batter.userData.home.set(...BATTER_HOME);
+      batter.userData.homeFacing = -0.25;
+      nonStriker.userData.home.set(...NON_STRIKER_HOME);
+      nonStriker.userData.homeFacing = Math.PI;
       const recoveryStart = currentPresentationMs - RECOVERY_MS;
       const recovering = !!delivery && !state.revealing && !state.ceremony && state.motion && actionElapsed >= recoveryStart;
       const fieldTime = state.motion ? Math.min(actionElapsed, recoveryStart) : recoveryStart;
@@ -703,7 +712,9 @@ export default function CricketArena({ active, phase, lastBall, presentedBall = 
           pose(bowler, 0, state.motion ? Math.sin(Math.min(progress * 2, 1) * Math.PI / 2) : 1);
           pose(keeper, 0, 0.85);
         } else if (battingRun && !boundary && fieldTime >= 500) {
+          batter.position.x = battingRun.batterX;
           batter.position.z = battingRun.batterZ;
+          nonStriker.position.x = battingRun.runnerX;
           nonStriker.position.z = battingRun.runnerZ;
           batter.rotation.y = battingRun.batterFacing;
           nonStriker.rotation.y = battingRun.runnerFacing;
@@ -866,14 +877,17 @@ export default function CricketArena({ active, phase, lastBall, presentedBall = 
         });
         const recoveryTime = actionElapsed - recoveryStart;
         const blend = THREE.MathUtils.smoothstep(recoveryTime, 0, RECOVERY_MS * 0.12);
+        const ends = deliveryBattingEnds(delivery);
         allPlayers.forEach((player, index) => {
           const previous = recoveryPoses[index];
-          const returning = recoveryFrame(previous.position, player.userData.home.toArray(), previous.facing, player.userData.homeFacing, recoveryTime);
+          const home = player === batter ? ends.batter : player === nonStriker ? ends.runner : player.userData.home.toArray();
+          const homeFacing = player === batter ? ends.swapped ? Math.PI : -0.25 : player === nonStriker ? ends.swapped ? -0.25 : Math.PI : player.userData.homeFacing;
+          const returning = recoveryFrame(previous.position, home, previous.facing, homeFacing, recoveryTime);
           pose(player, returning.stride);
           player.position.set(...returning.position);
           player.rotation.set(0, returning.facing, 0);
           player.quaternion.slerpQuaternions(previous.rotation, player.quaternion.clone(), blend);
-          if (player === batter && recoveryTime >= RECOVERY_MS * 0.85) reach(batter, [[-0.18, 1.26, -0.43], [-0.06, 1.34, -0.43]]);
+          if (player === (ends.swapped ? nonStriker : batter) && recoveryTime >= RECOVERY_MS * 0.85) reach(player, [[-0.18, 1.26, -0.43], [-0.06, 1.34, -0.43]]);
           previous.nodes.forEach((node, nodeIndex) => node.quaternion.slerpQuaternions(previous.rotations[nodeIndex], node.quaternion.clone(), blend));
         });
         ball.visible = false;
@@ -1167,6 +1181,7 @@ export default function CricketArena({ active, phase, lastBall, presentedBall = 
       host.dataset.ceremonyPlayerPositions = state.ceremony ? JSON.stringify(squads.flat().filter((player) => player.visible).map((player) => player.position.toArray())) : "[]";
       host.dataset.movingFielders = delivery && currentShot?.chase && !state.revealing && !state.ceremony ? "1" : "0";
       host.dataset.playerPositions = JSON.stringify(allPlayers.map((player) => player.position.toArray()));
+      host.dataset.striker = String(striker);
       host.dataset.playerFacings = JSON.stringify(allPlayers.map((player) => {
         facingDirection.set(0, 0, 1).applyQuaternion(player.quaternion);
         return Math.atan2(facingDirection.x, facingDirection.z);

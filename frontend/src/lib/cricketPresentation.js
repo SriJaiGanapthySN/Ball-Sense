@@ -7,6 +7,8 @@ export const TEAM_COLORS = { you: "#2476d3", computer: "#efc52b" };
 export const FIELDER_SPEED = 4.5;
 export const UMPIRE_HOME = [0, 0.05, -11.8];
 export const BOWLER_HOME = [1.1, 0.05, -18];
+export const BATTER_HOME = [0.65, 0.05, 7];
+export const NON_STRIKER_HOME = [-1.3, 0.05, -7];
 export const BALL_RADIUS = 0.05;
 export const UMPIRE_SIGNAL_MS = 1800;
 export const CHEER_STAGE_CENTRES = [[-20, -25], [20, -25]];
@@ -154,15 +156,32 @@ export function overthrowFrame(timeline, elapsedMs) {
     stopped: elapsed >= path.stopSeconds };
 }
 
+export function deliveryBattingEnds(delivery) {
+  const swapped = !delivery?.wicket && [1, 3].includes(delivery?.runs);
+  return { swapped, batter: swapped ? NON_STRIKER_HOME : BATTER_HOME, runner: swapped ? BATTER_HOME : NON_STRIKER_HOME };
+}
+
+export function strikerIndexForDelivery(context, activeDelivery) {
+  return (context?.history || []).reduce((striker, ball) => {
+    const sameInnings = ball.batting === context.batting && ball.innings === context.innings && (ball.superOver || 0) === (context.superOver || 0);
+    const pending = activeDelivery && ball.batting === activeDelivery.batting && ball.innings === activeDelivery.innings && ball.ball === activeDelivery.ball && (ball.superOver || 0) === (activeDelivery.superOver || 0);
+    return sameInnings && !pending && deliveryBattingEnds(ball).swapped ? 1 - striker : striker;
+  }, 0);
+}
+
 export function deliveryRunningFrame(delivery, elapsedMs, timeline) {
-  if (!delivery.overthrow) return runningFrame(delivery.runs, elapsedMs);
-  const timing = timeline || returnTimeline(delivery);
-  if (elapsedMs < timing.extraStart) {
+  const timing = delivery.overthrow ? timeline || returnTimeline(delivery) : null;
+  if (timing && elapsedMs < timing.extraStart) {
     const waiting = runningFrame(1, elapsedMs);
     const turn = smooth((elapsedMs - timing.missAt) / (timing.extraStart - timing.missAt));
-    return { ...waiting, batterFacing: turn * Math.PI, runnerFacing: (1 + turn) * Math.PI };
+    return { ...waiting, batterX: BATTER_HOME[0], runnerX: NON_STRIKER_HOME[0], batterFacing: turn * Math.PI, runnerFacing: (1 + turn) * Math.PI };
   }
-  return runningFrame(delivery.runs, RUN_START_MS + RUN_LEG_MS + elapsedMs - timing.extraStart);
+  const runningTime = timing ? RUN_START_MS + RUN_LEG_MS + elapsedMs - timing.extraStart : elapsedMs;
+  const frame = runningFrame(delivery.runs, runningTime);
+  const ends = deliveryBattingEnds(delivery);
+  const settle = smooth((runningTime - RUN_START_MS - delivery.runs * RUN_LEG_MS + 500) / 500);
+  return { ...frame, batterX: settle === 1 ? ends.batter[0] : BATTER_HOME[0] + (ends.batter[0] - BATTER_HOME[0]) * settle,
+    runnerX: settle === 1 ? ends.runner[0] : NON_STRIKER_HOME[0] + (ends.runner[0] - NON_STRIKER_HOME[0]) * settle };
 }
 
 export function deliveryLabel(delivery) {

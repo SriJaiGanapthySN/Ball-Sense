@@ -4,6 +4,7 @@ import { createActor } from "xstate";
 import seedrandom from "seedrandom";
 import chaseModel from "./chaseModel.json" with { type: "json" };
 import { returnTimeline, overthrowFrame, victoryFrame, VICTORY_MS, deliveryRunningFrame, RECOVERY_MS, movementFacing, recoveryFrame, bowlingFrame, dismissalForShot, UMPIRE_SIGNAL_MS, umpireSignalFrame } from "./cricketPresentation.js";
+import { BATTER_HOME, NON_STRIKER_HOME, deliveryBattingEnds, strikerIndexForDelivery } from "./cricketPresentation.js";
 import { DISMISSALS, FIELD_POSITIONS, CATCH_POSITIONS, KEEPER_INDEX, CHEER_MS, TEAM_COLORS, FIELDER_SPEED, CHEER_STAGE_CENTRES, CEREMONY_ORIGIN, inCheerStageBay, shotPlan, chaseFrame, handshakeLineFrame, awardFrame, cheeringTeam, presentationDuration, matchSummary, tossFrame, dismissalFrame, outcomeDuration, runningFrame, samplePresentation } from "./cricketPresentation.js";
 import { opponentPlan, sampleOpponent, training } from "./cricketOpponent.js";
 import { formatOvers, handCricketMachine, handMatchInsights, handInningsLimits, oversToBalls, SCENARIO_PRESETS, scenarioFromMatch, simulateChase, validateScenario } from "./cricketGames.js";
@@ -679,6 +680,46 @@ test("recovery turns players before moving and finishes exactly at home", () => 
   assert.ok(Math.abs(Math.sin(end.facing + 0.25)) < 1e-8);
   assert.equal(end.moving, false);
   assert.equal(end.complete, true);
+});
+
+test("batters keep their completed-run creases throughout the next-delivery reset", () => {
+  for (const runs of [1, 2, 3, 4, 5, 6]) for (const overthrow of [false, true]) {
+    if (overthrow && ![2, 3].includes(runs)) continue;
+    const delivery = { runs, overthrow, side: 1, ball: 1, batting: "you" };
+    const finish = deliveryRunningFrame(delivery, 100000);
+    const ends = deliveryBattingEnds(delivery);
+    const batter = [finish.batterX, 0.05, finish.batterZ];
+    const runner = [finish.runnerX, 0.05, finish.runnerZ];
+    assert.deepEqual(batter, ends.batter);
+    assert.deepEqual(runner, ends.runner);
+    for (let elapsed = 0; elapsed <= RECOVERY_MS; elapsed += 100) {
+      assert.deepEqual(recoveryFrame(batter, ends.batter, finish.batterFacing, 0, elapsed).position, batter);
+      assert.deepEqual(recoveryFrame(runner, ends.runner, finish.runnerFacing, 0, elapsed).position, runner);
+    }
+    if (overthrow) {
+      const timeline = returnTimeline(delivery);
+      const waiting = deliveryRunningFrame(delivery, timeline.extraStart - 1, timeline);
+      const resuming = deliveryRunningFrame(delivery, timeline.extraStart, timeline);
+      assert.equal(waiting.batterX, resuming.batterX);
+      assert.equal(waiting.runnerX, resuming.runnerX);
+    }
+  }
+  assert.equal(deliveryBattingEnds({ runs: 1, wicket: true }).swapped, false);
+  assert.deepEqual(deliveryBattingEnds(null), { swapped: false, batter: BATTER_HOME, runner: NON_STRIKER_HOME });
+});
+
+test("strike changes only after completed odd runs in the active innings and round", () => {
+  const history = [1, 5, 3].map((runs, index) => ({ runs, batting: "you", innings: 1, superOver: 0, ball: index + 1 }));
+  const context = { batting: "you", innings: 1, superOver: 0, history };
+  assert.equal(strikerIndexForDelivery(context, { ...history[2] }), 1);
+  assert.equal(strikerIndexForDelivery(context, null), 0);
+  assert.equal(strikerIndexForDelivery({ ...context, history: history.slice(0, 1) }), 1);
+  assert.equal(strikerIndexForDelivery({ ...context, history: history.slice(0, 2) }), 1);
+  assert.equal(strikerIndexForDelivery({ ...context, innings: 2 }), 0);
+  assert.equal(strikerIndexForDelivery({ ...context, superOver: 1 }), 0);
+  assert.equal(strikerIndexForDelivery({ ...context, batting: "computer" }), 0);
+  assert.equal(strikerIndexForDelivery({ ...context, history: [] }), 0);
+  assert.equal(strikerIndexForDelivery(null), 0);
 });
 
 test("batters complete exactly 1, 2, or 3 crossings and turn at each crease", () => {
